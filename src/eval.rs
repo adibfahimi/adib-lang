@@ -186,5 +186,28 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             Expr::Str("".to_string())
         }
         Expr::Return(e) => eval(e, env),
+        Expr::While(cond, block) => {
+            let mut result = None;
+            while eval(cond, env) == Expr::Bool(true) {
+                for expr in block {
+                    result = Some(eval(expr, env));
+                }
+            }
+
+            result.unwrap_or_else(|| Expr::Str("".to_string()))
+        }
+        Expr::For(init, cond, step, block) => {
+            let mut result = None;
+            eval(init, env);
+
+            while eval(cond, env) == Expr::Bool(true) {
+                for expr in block {
+                    result = Some(eval(expr, env));
+                }
+                eval(step, env);
+            }
+
+            result.unwrap_or_else(|| Expr::Str("".to_string()))
+        }
     }
 }

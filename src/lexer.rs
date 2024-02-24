@@ -5,6 +5,7 @@ pub enum Token {
     Paren(char),
     Operator(char),
     Comma,
+    SemiColon,
     ComparisonOperator(String),
     Keyword(String),
     Identifier(String),
@@ -19,6 +20,7 @@ impl fmt::Display for Token {
             Token::Paren(c) => write!(f, "Paren({})", c),
             Token::Operator(c) => write!(f, "Operator({})", c),
             Token::Comma => write!(f, "Comma"),
+            Token::SemiColon => write!(f, "SemiColon"),
             Token::ComparisonOperator(s) => write!(f, "ComparisonOperator({})", s),
             Token::Keyword(s) => write!(f, "Keyword({})", s),
             Token::Identifier(s) => write!(f, "Identifier({})", s),
@@ -51,6 +53,10 @@ pub fn tokenize(source: &str) -> Vec<Token> {
             }
             '(' | ')' | '{' | '}' | '[' | ']' => {
                 tokens.push(Paren(ch));
+                pos += 1;
+            }
+            ';' => {
+                tokens.push(SemiColon);
                 pos += 1;
             }
             '=' => {

@@ -16,6 +16,8 @@ pub enum Expr {
     Return(Box<Expr>),
     Conditional(Box<Expr>, Vec<Expr>, Vec<Expr>),
     Comparison(String, Box<Expr>, Box<Expr>),
+    While(Box<Expr>, Vec<Expr>),
+    For(Box<Expr>, Box<Expr>, Box<Expr>, Vec<Expr>),
 }
 
 use Token::*;
@@ -151,6 +153,63 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
 
                 (Expr::FunctionDef(name, args, body), i)
             }
+            "while" => {
+                let mut end = 2; // skip while + (
+                while end < tokens.len() && tokens[end] != Token::Paren(')') {
+                    end += 1;
+                }
+
+                let (cond, _) = parse_expr(&tokens[2..end]);
+
+                let mut block = vec![];
+                let mut i = end + 2;
+                while i < tokens.len() && tokens[i] != Token::Paren('}') {
+                    let (expr, n) = parse_expr(&tokens[i..]);
+                    block.push(expr);
+                    i += n;
+                }
+
+                (Expr::While(Box::new(cond), block), i + 1) // skip }
+            }
+            "for" => {
+                let mut end = 2;
+
+                while end < tokens.len() && tokens[end] != Token::SemiColon {
+                    end += 1;
+                }
+
+                let (init, _) = parse_expr(&tokens[2..end]);
+
+                let mut end2 = end + 1;
+
+                while end2 < tokens.len() && tokens[end2] != Token::SemiColon {
+                    end2 += 1;
+                }
+
+                let (cond, _) = parse_expr(&tokens[end + 1..end2]);
+
+                let mut end3 = end2;
+
+                while end3 < tokens.len() && tokens[end3] != Token::Paren(')') {
+                    end3 += 1;
+                }
+
+                let (step, _) = parse_expr(&tokens[end2 + 1..end3]);
+
+                let mut block = vec![];
+                let mut i = end3 + 2;
+
+                while i < tokens.len() && tokens[i] != Token::Paren('}') {
+                    let (expr, n) = parse_expr(&tokens[i..]);
+                    block.push(expr);
+                    i += n;
+                }
+
+                (
+                    Expr::For(Box::new(init), Box::new(cond), Box::new(step), block),
+                    i + 1,
+                ) // skip }
+            }
             _ => panic!("Unexpected keyword: {:?}", key),
         },
         Operator(op) => {
@@ -198,6 +257,7 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                             n + 2,
                         )
                     }
+
                     _ => (Expr::Identifier(s.clone()), 1),
                 }
             } else {
