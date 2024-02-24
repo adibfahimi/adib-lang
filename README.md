@@ -13,16 +13,18 @@ var b = 2
 
 var c = sum(a,b)
 
-var i = 0
-fn loop(){
-    if(i<10){
-        print("i is " + i)
-        i = i + 1
-        loop()
-    }
+for(var i = 0; i < 10; i=i+1){
+    print(i)
 }
 
-loop()
+while(a < 10){
+    print(a)
+    a = a + 1
+}
+
+if(a > 10){
+    print("a is greater than 10")
+}
 ```
 
 ## Functions:
