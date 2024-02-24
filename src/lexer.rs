@@ -114,7 +114,7 @@ pub fn tokenize(source: &str) -> Vec<Token> {
                     "false" | "true" => {
                         tokens.push(Bool(identifier.parse().unwrap()));
                     }
-                    "if" | "else" | "while" | "for" | "fn" | "var" | "return" => {
+                    "if" | "else" | "while" | "for" | "function" | "var" | "return" => {
                         tokens.push(Keyword(identifier.to_string()));
                     }
                     _ => tokens.push(Identifier(identifier.to_string())),

@@ -125,10 +125,10 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
 
                 (Expr::Var(name, Box::new(expr.0)), 3 + expr.1)
             }
-            "fn" => {
+            "function" => {
                 let name = match tokens[1] {
                     Identifier(ref s) => s.clone(),
-                    _ => panic!("Expected identifier after fn"),
+                    _ => panic!("Expected identifier after function"),
                 };
 
                 let mut i = 3; // skip fn + name + (
