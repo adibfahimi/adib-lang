@@ -38,7 +38,7 @@ if (a > 10) {
 
 Since this is the Adib language and it is similar to JavaScript, you can use any text editor to write Adib code.
 
-## Neovim
+- ### Neovim
 
 ```lua
 vim.cmd([[
@@ -47,7 +47,7 @@ au BufNewFile,BufRead *.adib set filetype=javascript
 
 ```
 
-### VSCode `settings.json`
+- ### VSCode `settings.json`
 
 ```json
 "files.associations": {
