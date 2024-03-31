@@ -1,6 +1,5 @@
-use core::panic;
-
 use crate::lexer::Token;
+use core::panic;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -8,18 +7,61 @@ pub enum Expr {
     Number(i64),
     Str(String),
     Identifier(String),
-    Op(char, Box<Expr>, Box<Expr>),
-    Var(String, Box<Expr>),
-    SetVar(String, Box<Expr>),
-    FunctionCall(String, Vec<Expr>),
-    FunctionDef(String, Vec<Token>, Vec<Expr>),
-    Return(Box<Expr>),
-    Conditional(Box<Expr>, Vec<Expr>, Vec<Expr>),
-    Comparison(String, Box<Expr>, Box<Expr>),
-    While(Box<Expr>, Vec<Expr>),
-    For(Box<Expr>, Box<Expr>, Box<Expr>, Vec<Expr>),
 
-    Nop, // No operation TODO: remove this
+    Op {
+        op: char,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+
+    Comparison {
+        op: String,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+
+    Variable {
+        name: String,
+        value: Box<Expr>,
+    },
+
+    SetVariable {
+        name: String,
+        value: Box<Expr>,
+    },
+
+    FunctionCall {
+        name: String,
+        args: Vec<Expr>,
+    },
+
+    FunctionDef {
+        name: String,
+        args: Vec<Token>,
+        body: Vec<Expr>,
+    },
+
+    Return(Box<Expr>),
+
+    Conditional {
+        cond: Box<Expr>,
+        then_block: Vec<Expr>,
+        else_block: Vec<Expr>,
+    },
+
+    While {
+        cond: Box<Expr>,
+        block: Vec<Expr>,
+    },
+
+    For {
+        init: Box<Expr>,
+        cond: Box<Expr>,
+        step: Box<Expr>,
+        block: Vec<Expr>,
+    },
+
+    Nop, // TODO: remove this
 }
 
 use Token::*;
@@ -34,14 +76,22 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                     Operator(op) => {
                         let (expr, n) = parse_expr(&tokens[2..]);
                         (
-                            Expr::Op(op, Box::new(Expr::Number(a)), Box::new(expr)),
+                            Expr::Op {
+                                op,
+                                lhs: Box::new(Expr::Number(a)),
+                                rhs: Box::new(expr),
+                            },
                             n + 2,
                         )
                     }
                     ComparisonOperator(ref op) => {
                         let (expr, n) = parse_expr(&tokens[2..]);
                         (
-                            Expr::Comparison(op.clone(), Box::new(Expr::Number(a)), Box::new(expr)),
+                            Expr::Comparison {
+                                op: op.clone(),
+                                lhs: Box::new(Expr::Number(a)),
+                                rhs: Box::new(expr),
+                            },
                             n + 2,
                         )
                     }
@@ -57,18 +107,22 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                     Operator(op) => {
                         let (expr, n) = parse_expr(&tokens[2..]);
                         (
-                            Expr::Op(op, Box::new(Expr::Str(s.clone())), Box::new(expr)),
+                            Expr::Op {
+                                op,
+                                lhs: Box::new(Expr::Str(s.clone())),
+                                rhs: Box::new(expr),
+                            },
                             n + 2,
                         )
                     }
                     ComparisonOperator(ref op) => {
                         let (expr, n) = parse_expr(&tokens[2..]);
                         (
-                            Expr::Comparison(
-                                op.clone(),
-                                Box::new(Expr::Str(s.clone())),
-                                Box::new(expr),
-                            ),
+                            Expr::Comparison {
+                                op: op.clone(),
+                                lhs: Box::new(Expr::Str(s.clone())),
+                                rhs: Box::new(expr),
+                            },
                             n + 2,
                         )
                     }
@@ -108,7 +162,14 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                     i += 1; // skip }
                 }
 
-                (Expr::Conditional(Box::new(cond), then_block, else_block), i)
+                (
+                    Expr::Conditional {
+                        cond: Box::new(cond),
+                        then_block,
+                        else_block,
+                    },
+                    i,
+                )
             }
             "return" => {
                 let (expr, n) = parse_expr(&tokens[1..]);
@@ -125,7 +186,13 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                     _ => panic!("Expected = after {}", key),
                 };
 
-                (Expr::Var(name, Box::new(expr.0)), 3 + expr.1)
+                (
+                    Expr::Variable {
+                        name,
+                        value: Box::new(expr.0),
+                    },
+                    3 + expr.1,
+                )
             }
             "function" => {
                 let name = match tokens[1] {
@@ -153,7 +220,7 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
 
                 i += 1; // skip }
 
-                (Expr::FunctionDef(name, args, body), i)
+                (Expr::FunctionDef { name, args, body }, i)
             }
             "while" => {
                 let mut end = 2; // skip while + (
@@ -171,7 +238,13 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                     i += n;
                 }
 
-                (Expr::While(Box::new(cond), block), i + 1) // skip }
+                (
+                    Expr::While {
+                        cond: Box::new(cond),
+                        block,
+                    },
+                    i + 1,
+                )
             }
             "for" => {
                 let mut end = 2;
@@ -208,7 +281,12 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                 }
 
                 (
-                    Expr::For(Box::new(init), Box::new(cond), Box::new(step), block),
+                    Expr::For {
+                        init: Box::new(init),
+                        cond: Box::new(cond),
+                        step: Box::new(step),
+                        block,
+                    },
                     i + 1,
                 ) // skip }
             }
@@ -217,7 +295,11 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
         Operator(op) => {
             let (expr, n) = parse_expr(&tokens[1..]);
             (
-                Expr::Op(op, Box::new(Expr::Number(0)), Box::new(expr)),
+                Expr::Op {
+                    op,
+                    lhs: Box::new(Expr::Nop),
+                    rhs: Box::new(expr),
+                },
                 n + 1,
             )
         }
@@ -235,27 +317,43 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                                 i += 1; // skip comma
                             }
                         }
-                        (Expr::FunctionCall(s.clone(), args), i + 1)
+                        (
+                            Expr::FunctionCall {
+                                name: s.clone(),
+                                args,
+                            },
+                            i + 1,
+                        )
                     }
                     Operator('=') => {
                         let (expr, n) = parse_expr(&tokens[2..]);
-                        (Expr::SetVar(s.clone(), Box::new(expr)), n + 2)
+                        (
+                            Expr::SetVariable {
+                                name: s.clone(),
+                                value: Box::new(expr),
+                            },
+                            n + 2,
+                        )
                     }
                     Operator(op) => {
                         let (expr, n) = parse_expr(&tokens[2..]);
                         (
-                            Expr::Op(op, Box::new(Expr::Identifier(s.clone())), Box::new(expr)),
+                            Expr::Op {
+                                op,
+                                lhs: Box::new(Expr::Identifier(s.clone())),
+                                rhs: Box::new(expr),
+                            },
                             n + 2,
                         )
                     }
                     ComparisonOperator(ref op) => {
                         let (expr, n) = parse_expr(&tokens[2..]);
                         (
-                            Expr::Comparison(
-                                op.clone(),
-                                Box::new(Expr::Identifier(s.clone())),
-                                Box::new(expr),
-                            ),
+                            Expr::Comparison {
+                                op: op.clone(),
+                                lhs: Box::new(Expr::Identifier(s.clone())),
+                                rhs: Box::new(expr),
+                            },
                             n + 2,
                         )
                     }

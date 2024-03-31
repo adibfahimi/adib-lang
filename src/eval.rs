@@ -47,9 +47,9 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             Some(v) => v.clone(),
             None => panic!("Variable {} not found", s),
         },
-        Expr::Op(op, l, r) => {
-            let l = eval(l, env);
-            let r = eval(r, env);
+        Expr::Op { op, lhs, rhs } => {
+            let l = eval(lhs, env);
+            let r = eval(rhs, env);
             match (l, r) {
                 (Expr::Number(l), Expr::Number(r)) => match op {
                     '+' => Expr::Number(l + r),
@@ -71,9 +71,9 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 _ => panic!("Invalid operands for operator {}", op),
             }
         }
-        Expr::Comparison(op, l, r) => {
-            let l = eval(l, env);
-            let r = eval(r, env);
+        Expr::Comparison { op, lhs, rhs } => {
+            let l = eval(lhs, env);
+            let r = eval(rhs, env);
             match (l, r) {
                 (Expr::Number(l), Expr::Number(r)) => match op.as_str() {
                     "==" => Expr::Bool(l == r),
@@ -96,7 +96,11 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 _ => panic!("Invalid operands for operator {}", op),
             }
         }
-        Expr::Conditional(cond, then_block, else_block) => {
+        Expr::Conditional {
+            cond,
+            then_block,
+            else_block,
+        } => {
             let condition = eval(cond, env);
             match condition {
                 Expr::Bool(b) => {
@@ -116,7 +120,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 _ => panic!("Condition must be a boolean"),
             }
         }
-        Expr::Var(name, value) => {
+        Expr::Variable { name, value } => {
             let value = eval(value, env);
 
             match value {
@@ -127,7 +131,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 _ => panic!("Invalid value for variable {}", name),
             }
         }
-        Expr::SetVar(name, value) => {
+        Expr::SetVariable { name, value } => {
             let value = eval(value, env);
 
             if env.get(name).is_none() {
@@ -142,33 +146,34 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 _ => panic!("Invalid value for variable {}", name),
             }
         }
-        Expr::FunctionCall(name, arguments) => {
+        Expr::FunctionCall { name, args } => {
             if name == "print" {
                 let mut results = Vec::new();
-                for arg in arguments {
+                for arg in args {
                     results.push(eval(arg, env));
                 }
                 return std_print(results);
             }
 
             if name == "sqrt" {
-                if arguments.len() != 1 {
+                if args.len() != 1 {
                     panic!("sqrt expects exactly one argument");
                 }
-                let arg = eval(&arguments[0], env);
+                let arg = eval(&args[0], env);
                 if let Expr::Number(n) = arg {
                     return Expr::Number((n as f64).sqrt() as i64);
                 }
             }
 
             let mut results = Vec::new();
-            for arg in arguments {
+            for arg in args {
                 results.push(eval(arg, env));
             }
             match env.get(name) {
-                Some(Expr::FunctionDef(_, params, body)) => {
+                Some(Expr::FunctionDef { name, args, body }) => {
+                    _ = name;
                     let mut new_env = env.clone();
-                    for (param, result) in params.iter().zip(results.iter()) {
+                    for (param, result) in args.iter().zip(results.iter()) {
                         new_env.set(param.to_string(), result.clone());
                     }
                     body.iter()
@@ -179,15 +184,19 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 _ => panic!("{} is not a function", name),
             }
         }
-        Expr::FunctionDef(name, params, body) => {
+        Expr::FunctionDef { name, args, body } => {
             env.set(
                 name.clone(),
-                Expr::FunctionDef(name.clone(), params.clone(), body.clone()),
+                Expr::FunctionDef {
+                    name: name.clone(),
+                    args: args.clone(),
+                    body: body.clone(),
+                },
             );
             Expr::Str("".to_string())
         }
         Expr::Return(e) => eval(e, env),
-        Expr::While(cond, block) => {
+        Expr::While { cond, block } => {
             let mut result = None;
             while eval(cond, env) == Expr::Bool(true) {
                 for expr in block {
@@ -197,7 +206,12 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
 
             result.unwrap_or_else(|| Expr::Str("".to_string()))
         }
-        Expr::For(init, cond, step, block) => {
+        Expr::For {
+            init,
+            cond,
+            step,
+            block,
+        } => {
             let mut result = None;
             eval(init, env);
 
