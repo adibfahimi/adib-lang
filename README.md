@@ -33,6 +33,7 @@ if (a > 10) {
 
 - `print`: prints the value to the console
 - `sqrt`: returns the square root of the number
+- `free`: frees the memory allocated to the variable
 
 ## Editor
 
