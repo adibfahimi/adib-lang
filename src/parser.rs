@@ -18,6 +18,8 @@ pub enum Expr {
     Comparison(String, Box<Expr>, Box<Expr>),
     While(Box<Expr>, Vec<Expr>),
     For(Box<Expr>, Box<Expr>, Box<Expr>, Vec<Expr>),
+
+    Nop, // No operation TODO: remove this
 }
 
 use Token::*;
@@ -264,6 +266,8 @@ fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
                 (Expr::Identifier(s.clone()), 1)
             }
         }
+
+        SemiColon => (Expr::Nop, 1),
         _ => panic!("Unexpected token: {:?}", tokens[0]),
     }
 }

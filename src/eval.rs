@@ -39,6 +39,7 @@ impl Environment {
 pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
     // println!("Evaluating {:?}", expr);
     match expr {
+        Expr::Nop => Expr::Number(0), // TODO: Remove this
         Expr::Bool(b) => Expr::Bool(*b),
         Expr::Number(n) => Expr::Number(*n),
         Expr::Str(s) => Expr::Str(s.clone()),
