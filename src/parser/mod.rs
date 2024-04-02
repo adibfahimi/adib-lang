@@ -1,7 +1,9 @@
+pub mod parse_array;
 pub mod parse_identifier;
 pub mod parse_if;
 pub mod parse_keyword;
 pub mod parse_number;
+pub mod parse_object;
 pub mod parse_operator;
 pub mod parse_string;
 
@@ -14,6 +16,17 @@ pub enum Expr {
     Number(i64),
     Str(String),
     Identifier(String),
+    Object(Vec<(String, Box<Expr>)>),
+    Array(Vec<Expr>),
+    ArrayIndex {
+        name: String,
+        index: Box<Expr>,
+    },
+
+    Member {
+        name: String,
+        member: String,
+    },
 
     Op {
         op: char,
@@ -68,7 +81,7 @@ pub enum Expr {
         block: Vec<Expr>,
     },
 
-    Nop, // TODO: remove this
+    Nop,
 }
 
 use Token::*;

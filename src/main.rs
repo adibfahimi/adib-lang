@@ -1,6 +1,7 @@
 mod eval;
 mod lexer;
 mod parser;
+mod std_functions;
 
 fn main() {
     let file_name = std::env::args().nth(1).expect("no file name given");

@@ -5,6 +5,35 @@ use Token::*;
 pub fn parse_identifier(tokens: &[Token], s: String) -> (Expr, usize) {
     if tokens.len() > 1 {
         match tokens[1] {
+            Dot => {
+                let (expr, n) = parse_expr(&tokens[2..]);
+
+                match expr {
+                    Expr::Identifier(member) => (
+                        Expr::Member {
+                            name: s.clone(),
+                            member,
+                        },
+                        n + 2,
+                    ),
+                    _ => panic!("Expected identifier after '.'"),
+                }
+            }
+            Paren('[') => {
+                let mut end = 2;
+                while tokens[end] != Paren(']') {
+                    end += 1;
+                }
+
+                let (expr, _) = parse_expr(&tokens[2..end]);
+                (
+                    Expr::ArrayIndex {
+                        name: s.clone(),
+                        index: Box::new(expr),
+                    },
+                    end + 1,
+                )
+            }
             Paren('(') => {
                 let mut i = 2; // skip identifier + (
                 let mut args = vec![];

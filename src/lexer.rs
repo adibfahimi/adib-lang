@@ -144,7 +144,8 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexerError> {
                     "false" | "true" => {
                         tokens.push(Bool(identifier.parse().unwrap()));
                     }
-                    "if" | "else" | "while" | "for" | "function" | "var" | "return" => {
+                    "if" | "else" | "while" | "for" | "function" | "var" | "return" | "const"
+                    | "let" => {
                         tokens.push(Keyword(identifier.to_string()));
                     }
                     _ => tokens.push(Identifier(identifier.to_string())),
