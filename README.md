@@ -3,24 +3,24 @@
 ### Example:
 
 ```js
-// sum of two numbers
-function sum(a, b) {
-  return a + b;
+const myObject = {
+  name: "Adib Fahimi",
+  age: 19,
+};
+
+print("Hey, I'm ", myObject.name, " and I'm ", myObject.age, " years old!");
+
+const myArray = [1, 2, 61213, 444, 5];
+
+// Calculate the average of the array
+let sum = 0;
+for (let i = 0; i < myArray.length; i = i + 1) {
+  sum = sum + myArray[i];
 }
 
-var a = 1;
-var b = 2;
+print("The average of the array is: ", sum / myArray.length);
 
-var c = sum(a, b);
-
-for (var i = 0; i < 10; i = i + 1) {
-  print(i);
-}
-
-while (a < 10) {
-  print(a);
-  a = a + 1;
-}
+const a = 9;
 
 if (a > 10) {
   print("a is greater than 10");
@@ -55,7 +55,3 @@ au BufNewFile,BufRead *.adib set filetype=javascript
     "*.adib": "javascript"
 }
 ```
-
-### TODOS:
-
-- [ ] Better error handling
