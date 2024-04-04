@@ -67,41 +67,23 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexerError> {
                     pos += 1;
                 }
             }
+
             '\n' | '\t' | ' ' => {
                 pos += 1;
             }
+
             '(' | ')' | '{' | '}' | '[' | ']' => {
                 tokens.push(Paren(ch));
                 pos += 1;
             }
-            ';' => {
-                tokens.push(SemiColon);
-                pos += 1;
-            }
-            '=' => {
+
+            '=' | '!' => {
                 if pos + 1 < source.len() && source.chars().nth(pos + 1).unwrap() == '=' {
-                    tokens.push(ComparisonOperator("==".to_string()));
+                    tokens.push(ComparisonOperator(format!("{}=", ch)));
                     pos += 2;
                 } else {
-                    tokens.push(Operator('='));
+                    tokens.push(Operator(ch));
                     pos += 1;
-                }
-            }
-            '"' => {
-                let start = pos + 1;
-                pos += 1;
-                while pos < source.len() && source.chars().nth(pos).unwrap() != '"' {
-                    pos += 1;
-                }
-                tokens.push(Str(source[start..pos].to_string()));
-                pos += 1;
-            }
-            '!' => {
-                if pos + 1 < source.len() && source.chars().nth(pos + 1).unwrap() == '=' {
-                    tokens.push(ComparisonOperator("!=".to_string()));
-                    pos += 2;
-                } else {
-                    tokens.push(Operator('!'));
                 }
             }
 
@@ -115,10 +97,35 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexerError> {
                 }
             }
 
+            '"' => {
+                let start = pos + 1;
+                pos += 1;
+                while pos < source.len() && source.chars().nth(pos).unwrap() != '"' {
+                    pos += 1;
+                }
+                tokens.push(Str(source[start..pos].to_string()));
+                pos += 1;
+            }
+
             ',' => {
                 tokens.push(Comma);
                 pos += 1;
             }
+
+            ';' => {
+                tokens.push(SemiColon);
+                pos += 1;
+            }
+
+            ':' => {
+                tokens.push(Colon);
+                pos += 1;
+            }
+            '.' => {
+                tokens.push(Dot);
+                pos += 1;
+            }
+
             '+' | '-' | '*' | '%' | '^' => {
                 tokens.push(Operator(ch));
                 pos += 1;
@@ -151,14 +158,7 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexerError> {
                     _ => tokens.push(Identifier(identifier.to_string())),
                 }
             }
-            ':' => {
-                tokens.push(Colon);
-                pos += 1;
-            }
-            '.' => {
-                tokens.push(Dot);
-                pos += 1;
-            }
+
             _ => {
                 return Err(LexerError::UnexpectedCharacter(ch));
             }

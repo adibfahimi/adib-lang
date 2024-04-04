@@ -6,6 +6,12 @@ pub struct Environment {
     mem: HashMap<String, Expr>,
 }
 
+impl Default for Environment {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Environment {
     pub fn new() -> Self {
         Environment {
@@ -23,7 +29,6 @@ impl Environment {
 }
 
 pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
-    // println!("Evaluating {:?}", expr);
     match expr {
         Expr::Nop => Expr::Number(0),
         Expr::Bool(b) => Expr::Bool(*b),

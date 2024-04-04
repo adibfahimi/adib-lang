@@ -1,5 +1,25 @@
 use crate::parser::Expr;
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn my_println(s: &str) {
+    println!("{}", s);
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn my_println(s: &str) {
+    log(s);
+}
+
 pub fn std_print(args: Vec<Expr>) -> Expr {
     let mut output = String::new();
     for arg in args {
@@ -24,7 +44,8 @@ pub fn std_print(args: Vec<Expr>) -> Expr {
             _ => panic!("Invalid argument for print"),
         }
     }
-    println!("{}", output);
+    my_println(output.as_str());
+
     Expr::Str(output)
 }
 
