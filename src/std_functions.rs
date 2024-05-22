@@ -1,4 +1,4 @@
-use crate::parser::Expr;
+use crate::{eval::Environment, parser::Expr};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -60,13 +60,18 @@ pub fn std_sqrt(args: Vec<Expr>) -> Expr {
     panic!("Invalid argument for sqrt");
 }
 
-pub fn std_free(args: Vec<Expr>) -> Expr {
+pub fn std_free(args: &[Expr], env: &mut Environment) -> Expr {
     if args.len() != 1 {
         panic!("free expects exactly one argument");
     }
     let arg = &args[0];
-    if let Expr::Object(_) = arg {
-        return Expr::Bool(true);
+
+    match arg {
+        Expr::Identifier(i) => {
+            env.remove(i);
+            Expr::Str("".to_string())
+        }
+
+        _ => panic!("Invalid argument for free"),
     }
-    panic!("Invalid argument for free");
 }
