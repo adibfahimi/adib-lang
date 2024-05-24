@@ -1,43 +1,60 @@
 # Adib Lang
 
-### Example:
+### Examples:
 
 ```js
-const myObject = {
-  name: "Adib Fahimi",
-  age: 19,
-};
+// Print "Hello, world!"
+print("Hello, world!")
 
-print("Hey, I'm ", myObject.name, " and I'm ", myObject.age, " years old!");
-
-const myArray = [1, 2, 61213, 444, 5];
-
-// Calculate the average of the array
-let sum = 0;
-for (let i = 0; i < myArray.length; i = i + 1) {
-  sum = sum + myArray[i];
-}
-
-print("The average of the array is: ", sum / myArray.length);
-
-const a = 9;
-
-if (a > 10) {
-  print("a is greater than 10");
+// Conditional statements
+var age = 18
+if (age >= 18) {
+    print("You are eligible to vote.")
 } else {
-  print("a is less than 10");
+    print("You are not eligible to vote.")
 }
+
+// For loop
+for (let i = 0; i  < 10; i++) {
+  print(i)
+}
+
+// While loop
+let i = 0
+while (i < 10) {
+  print(i)  
+  i++
+}
+
+// Function definition
+function add(a, b) {
+  return a + b;
+}
+
+print(add(1, 2))  // Function call
+
+// Arrays
+var arr = [1, 2, 3, 4, 5]
+print(arr[0])
+
+// Objects
+var obj = {
+  name: "John",
+  age: 18
+}
+
+print(obj.name)
 ```
 
-## Functions:
+## Standard Functions:
 
-- `print`: prints the value to the console
-- `sqrt`: returns the square root of the number
-- `free`: frees the memory allocated to the variable
+- `print`: Outputs the value to the console.
+- `sqrt`: Returns the square root of the number.
+- `free`: Deallocates the memory assigned to the variable.
 
 ## Editor
 
-Since this is the Adib language and it is similar to JavaScript, you can use any text editor to write Adib code.
+The Adib language is similar to JavaScript, so you can use any text editor to write Adib code.
 
 - ### Neovim
 
@@ -45,7 +62,6 @@ Since this is the Adib language and it is similar to JavaScript, you can use any
 vim.cmd([[
 au BufNewFile,BufRead *.adib set filetype=javascript
 ]])
-
 ```
 
 - ### VSCode `settings.json`

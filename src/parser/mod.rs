@@ -97,6 +97,7 @@ pub(crate) fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
         Identifier(ref s) => parse_identifier::parse_identifier(tokens, s.clone()),
 
         SemiColon => (Expr::Nop, 1),
+        Paren('[') => parse_array::parse_array(tokens),
         _ => panic!("Unexpected token: {:?}", tokens[0]),
     }
 }

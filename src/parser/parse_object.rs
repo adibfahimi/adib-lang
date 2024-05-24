@@ -1,5 +1,6 @@
 use super::{parse_expr, Expr};
 use crate::lexer::Token;
+
 use Token::*;
 
 pub fn parse_object(tokens: &[Token]) -> (Expr, usize) {
@@ -36,6 +37,7 @@ pub fn parse_object(tokens: &[Token]) -> (Expr, usize) {
     }
 
     // Skip the closing curly brace
+
     i += 1;
 
     (Expr::Object(obj), i)

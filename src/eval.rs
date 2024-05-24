@@ -82,6 +82,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
         Expr::Op { op, lhs, rhs } => {
             let l = eval(lhs, env);
             let r = eval(rhs, env);
+
             match (l, r) {
                 (Expr::Number(l), Expr::Number(r)) => match op {
                     '+' => Expr::Number(l + r),
@@ -106,6 +107,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
         Expr::Comparison { op, lhs, rhs } => {
             let l = eval(lhs, env);
             let r = eval(rhs, env);
+
             match (l, r) {
                 (Expr::Number(l), Expr::Number(r)) => match op.as_str() {
                     "==" => Expr::Bool(l == r),
@@ -200,6 +202,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 "print" => std_functions::std_print(results),
                 "sqrt" => std_functions::std_sqrt(results),
                 "free" => std_functions::std_free(args, env),
+                "panic" => std_functions::std_panic(results),
                 _ => match env.get(name) {
                     Some(Expr::FunctionDef {
                         name: _,
