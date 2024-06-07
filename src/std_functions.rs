@@ -24,7 +24,8 @@ pub fn std_print(args: Vec<Expr>) -> Expr {
     let mut output = String::new();
     for arg in args {
         match arg {
-            Expr::Number(n) => output.push_str(&format!("{}", n)),
+            Expr::Int(n) => output.push_str(&format!("{}", n)),
+            Expr::Float(f) => output.push_str(&format!("{}", f)),
             Expr::Str(s) => output.push_str(&s),
             Expr::Bool(b) => output.push_str(&format!("{}", b)),
             Expr::Object(list) => {
@@ -54,8 +55,8 @@ pub fn std_sqrt(args: Vec<Expr>) -> Expr {
         panic!("sqrt expects exactly one argument");
     }
     let arg = &args[0];
-    if let Expr::Number(n) = arg {
-        return Expr::Number((*n as f64).sqrt() as i64);
+    if let Expr::Int(n) = arg {
+        return Expr::Int((*n as f64).sqrt() as i64);
     }
     panic!("Invalid argument for sqrt");
 }

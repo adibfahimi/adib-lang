@@ -13,7 +13,8 @@ use core::panic;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Bool(bool),
-    Number(i64),
+    Int(i64),
+    Float(f64),
     Str(String),
     Identifier(String),
     Object(Vec<(String, Box<Expr>)>),
@@ -89,7 +90,8 @@ use Token::*;
 pub(crate) fn parse_expr(tokens: &[Token]) -> (Expr, usize) {
     match tokens[0] {
         Bool(b) => (Expr::Bool(b), 1),
-        Num(a) => parse_number::parse_number(tokens, a),
+        Int(a) => parse_number::parse_number(tokens, a),
+        Float(a) => parse_number::parse_float(tokens, a),
         Str(ref s) => parse_string::parse_string(tokens, s.clone()),
 
         Keyword(ref key) => parse_keyword::parse_keyword(tokens, key),
