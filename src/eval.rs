@@ -32,27 +32,38 @@ impl Environment {
     }
 }
 
-pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
+pub fn eval(expr: &Expr, env: &mut Environment) -> Result<Expr, Expr> {
     match expr {
-        Expr::Nop => Expr::Int(0),
-        Expr::Bool(b) => Expr::Bool(*b),
-        Expr::Int(n) => Expr::Int(*n),
-        Expr::Float(f) => Expr::Float(*f),
-        Expr::Str(s) => Expr::Str(s.clone()),
-        Expr::Object(list) => Expr::Object(list.clone()),
-        Expr::Array(list) => Expr::Array(list.clone()),
+        Expr::Nop => Ok(Expr::Int(0)),
+        Expr::Bool(b) => Ok(Expr::Bool(*b)),
+        Expr::Int(n) => Ok(Expr::Int(*n)),
+        Expr::Float(f) => Ok(Expr::Float(*f)),
+        Expr::Str(s) => Ok(Expr::Str(s.clone())),
+        Expr::Object(list) => {
+            let mut evaluated_list = Vec::new();
+            for (key, value) in list {
+                let evaluated_value = eval(value, env)?;
+                evaluated_list.push((key.clone(), Box::new(evaluated_value)));
+            }
+            Ok(Expr::Object(evaluated_list))
+        }
+        Expr::Array(list) => {
+            let evaluated_list = eval_array_contents(list, env)?;
+            Ok(Expr::Array(evaluated_list))
+        }
         Expr::Identifier(s) => match env.get(s) {
-            Some(v) => v.clone(),
+            Some(v) => Ok(v.clone()),
             None => panic!("Variable {} not found", s),
         },
         Expr::ArrayIndex { name, index } => {
             let obj = env.get(name).expect("Object not found").clone();
             match obj {
                 Expr::Array(list) => {
-                    if let Expr::Int(i) = eval(index, env) {
-                        return list[i as usize].clone();
+                    if let Expr::Int(i) = eval(index, env)? {
+                        Ok(list[i as usize].clone())
+                    } else {
+                        panic!("Index must be a number");
                     }
-                    panic!("Index must be a number");
                 }
                 _ => panic!("{} is not an array", name),
             }
@@ -63,28 +74,26 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 Expr::Object(list) => {
                     for (key, value) in list {
                         if &key == member {
-                            return *value.clone();
+                            return Ok(*value.clone());
                         }
                     }
-
                     panic!("Member {} not found in object {}", member, name);
                 }
-
                 Expr::Array(list) => {
                     if member == "length" {
-                        return Expr::Int(list.len() as i64);
+                        Ok(Expr::Int(list.len() as i64))
+                    } else {
+                        panic!("Index must be a number");
                     }
-                    panic!("Index must be a number");
                 }
-
                 _ => panic!("{} is not an object", name),
             }
         }
         Expr::Op { op, lhs, rhs } => {
-            let l = eval(lhs, env);
-            let r = eval(rhs, env);
+            let l = eval(lhs, env)?;
+            let r = eval(rhs, env)?;
 
-            match (l, r) {
+            Ok(match (l, r) {
                 (Expr::Int(l), Expr::Int(r)) => match op {
                     '+' => Expr::Int(l + r),
                     '-' => Expr::Int(l - r),
@@ -121,7 +130,6 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                     '<' => Expr::Bool(l < r as f64),
                     _ => panic!("Invalid operator {}", op),
                 },
-
                 (Expr::Str(l), Expr::Str(r)) => match op {
                     '+' => Expr::Str(l + &r),
                     _ => panic!("Invalid operator {}", op),
@@ -131,13 +139,13 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                     _ => panic!("Invalid operator {}", op),
                 },
                 _ => panic!("Invalid operands for operator {}", op),
-            }
+            })
         }
         Expr::Comparison { op, lhs, rhs } => {
-            let l = eval(lhs, env);
-            let r = eval(rhs, env);
+            let l = eval(lhs, env)?;
+            let r = eval(rhs, env)?;
 
-            match (l, r) {
+            Ok(match (l, r) {
                 (Expr::Int(l), Expr::Int(r)) => match op.as_str() {
                     "==" => Expr::Bool(l == r),
                     "!=" => Expr::Bool(l != r),
@@ -157,38 +165,38 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                     _ => panic!("Invalid operator {}", op),
                 },
                 _ => panic!("Invalid operands for operator {}", op),
-            }
+            })
         }
         Expr::Conditional {
             cond,
             then_block,
             else_block,
         } => {
-            let condition = eval(cond, env);
+            let condition = eval(cond, env)?;
             match condition {
                 Expr::Bool(b) => {
                     if b {
                         for then_expr in then_block {
-                            let res = eval(then_expr, env);
-                            if let Expr::Return(_) = res {
-                                return res;
+                            match eval(then_expr, env) {
+                                Ok(_) => continue,
+                                Err(return_expr) => return Err(return_expr),
                             }
                         }
                     } else {
                         for else_expr in else_block {
-                            let res = eval(else_expr, env);
-                            if let Expr::Return(_) = res {
-                                return res;
+                            match eval(else_expr, env) {
+                                Ok(_) => continue,
+                                Err(return_expr) => return Err(return_expr),
                             }
                         }
                     }
-                    Expr::Str("".to_string())
+                    Ok(Expr::Str("".to_string()))
                 }
                 _ => panic!("Condition must be a boolean"),
             }
         }
         Expr::Variable { name, value } => {
-            let value = eval(value, env);
+            let value = eval(value, env)?;
 
             match value {
                 Expr::Int(_)
@@ -198,13 +206,13 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 | Expr::Object(_)
                 | Expr::Array(_) => {
                     env.set(name.clone(), value.clone());
-                    value
+                    Ok(value)
                 }
                 _ => panic!("Invalid value for variable {}", name),
             }
         }
         Expr::SetVariable { name, value } => {
-            let value = eval(value, env);
+            let value = eval(value, env)?;
 
             if env.get(name).is_none() {
                 panic!("Variable {} not found", name);
@@ -213,7 +221,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             match value {
                 Expr::Int(_) | Expr::Str(_) | Expr::Bool(_) | Expr::Object(_) | Expr::Array(_) => {
                     env.set(name.clone(), value.clone());
-                    value
+                    Ok(value)
                 }
                 _ => panic!("Invalid value for variable {}", name),
             }
@@ -221,14 +229,14 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
         Expr::FunctionCall { name, args } => {
             let mut results = Vec::new();
             for arg in args {
-                results.push(eval(arg, env));
+                results.push(eval(arg, env)?);
             }
 
             match name.as_str() {
-                "print" => std_functions::std_print(results),
-                "sqrt" => std_functions::std_sqrt(results),
-                "free" => std_functions::std_free(args, env),
-                "panic" => std_functions::std_panic(results),
+                "print" => Ok(std_functions::std_print(results)),
+                "sqrt" => Ok(std_functions::std_sqrt(results)),
+                "free" => Ok(std_functions::std_free(args, env)),
+                "panic" => Ok(std_functions::std_panic(results)),
                 _ => match env.get(name) {
                     Some(Expr::FunctionDef {
                         name: _,
@@ -247,13 +255,13 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                         }
 
                         for expr in body {
-                            let res = eval(expr, &mut new_env);
-                            if let Expr::Return(d) = res {
-                                return eval(&d, &mut new_env);
+                            match eval(expr, &mut new_env) {
+                                Ok(_) => continue,
+                                Err(return_expr) => return Ok(return_expr),
                             }
                         }
 
-                        Expr::Str("".to_string())
+                        Ok(Expr::Str("".to_string()))
                     }
                     _ => panic!("{} is not a function", name),
                 },
@@ -268,18 +276,23 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                     body: body.clone(),
                 },
             );
-            Expr::Str("".to_string())
+            Ok(Expr::Str("".to_string()))
         }
-        Expr::Return(e) => Expr::Return(e.clone()),
+        Expr::Return(e) => {
+            let evaluated = eval(e, env)?;
+            Err(evaluated)
+        }
         Expr::While { cond, block } => {
-            let mut result = None;
-            while eval(cond, env) == Expr::Bool(true) {
+            let mut result = Ok(Expr::Str("".to_string()));
+            while eval(cond, env)? == Expr::Bool(true) {
                 for expr in block {
-                    result = Some(eval(expr, env));
+                    match eval(expr, env) {
+                        Ok(expr) => result = Ok(expr),
+                        Err(return_expr) => return Err(return_expr),
+                    }
                 }
             }
-
-            result.unwrap_or_else(|| Expr::Str("".to_string()))
+            result
         }
         Expr::For {
             init,
@@ -287,21 +300,38 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             step,
             block,
         } => {
-            let mut result = None;
-            eval(init, env);
+            let mut result = Ok(Expr::Str("".to_string()));
+            eval(init, env)?;
 
-            while eval(cond, env) == Expr::Bool(true) {
+            while eval(cond, env)? == Expr::Bool(true) {
                 for expr in block {
-                    result = Some(eval(expr, env));
+                    match eval(expr, env) {
+                        Ok(expr) => result = Ok(expr),
+                        Err(return_expr) => {
+                            if let Expr::Variable { name, value: _ } = init.as_ref() {
+                                env.remove(name);
+                            }
+                            return Err(return_expr);
+                        }
+                    }
                 }
-                eval(step, env);
+                eval(step, env)?;
             }
 
             if let Expr::Variable { name, value: _ } = init.as_ref() {
                 env.remove(name);
             }
 
-            result.unwrap_or_else(|| Expr::Str("".to_string()))
+            result
         }
     }
+}
+
+fn eval_array_contents(list: &[Expr], env: &mut Environment) -> Result<Vec<Expr>, Expr> {
+    let mut evaluated_list = Vec::new();
+    for item in list {
+        let evaluated_item = eval(item, env)?;
+        evaluated_list.push(evaluated_item);
+    }
+    Ok(evaluated_list)
 }

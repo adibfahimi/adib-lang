@@ -3,8 +3,7 @@ function twoSum(nums, target) {
     for (let j = i + 1; j < nums.length; j = j + 1) {
       const sum = nums[i] + nums[j];
       if (sum == target) {
-        print(i, j);
-        panic("found");
+        return [i, j]
       }
     }
   }
@@ -12,4 +11,4 @@ function twoSum(nums, target) {
 
 const nums = [2, 7, 11, 15];
 
-twoSum(nums, 9)
+print(twoSum(nums, 9))
