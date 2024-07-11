@@ -2,9 +2,6 @@
 pub enum LexerError {
     #[error("Unexpected character: {0}")]
     UnexpectedCharacter(char),
-
-    #[error("Unexpected end of input")]
-    UnexpectedEndOfInput,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,157 +25,140 @@ pub enum Token {
 
 use Token::*;
 
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Identifier(s) => write!(f, "Identifier({})", s),
-            Int(n) => write!(f, "Num({})", n),
-            Float(d) => write!(f, "Float({})", d),
-            Str(s) => write!(f, "Str({})", s),
-            Bool(b) => write!(f, "Bool({})", b),
-            Paren(c) => write!(f, "Paren({})", c),
-            Operator(c) => write!(f, "Operator({})", c),
-            ComparisonOperator(s) => write!(f, "ComparisonOperator({})", s),
-            Keyword(s) => write!(f, "Keyword({})", s),
-            Comma => write!(f, "Comma"),
-            SemiColon => write!(f, "SemiColon"),
-            Colon => write!(f, "Colom"),
-            Dot => write!(f, "Dot"),
-        }
-    }
-}
-
-pub fn tokenize(source: &str) -> Result<Vec<Token>, LexerError> {
-    let mut tokens: Vec<Token> = Vec::new();
-    let mut pos = 0;
-
-    while pos < source.len() {
-        let ch = source
-            .chars()
-            .nth(pos)
-            .ok_or(LexerError::UnexpectedEndOfInput)?;
-
-        match ch {
-            '/' => {
-                if pos + 1 < source.len() && source.chars().nth(pos + 1).unwrap() == '/' {
-                    while pos < source.len() && source.chars().nth(pos).unwrap() != '\n' {
-                        pos += 1;
-                    }
-                } else {
-                    tokens.push(Operator('/'));
-                    pos += 1;
-                }
-            }
-
-            '\n' | '\t' | ' ' => {
-                pos += 1;
-            }
-
-            '(' | ')' | '{' | '}' | '[' | ']' => {
-                tokens.push(Paren(ch));
-                pos += 1;
-            }
-
-            '=' | '!' => {
-                if pos + 1 < source.len() && source.chars().nth(pos + 1).unwrap() == '=' {
-                    tokens.push(ComparisonOperator(format!("{}=", ch)));
-                    pos += 2;
-                } else {
-                    tokens.push(Operator(ch));
-                    pos += 1;
-                }
-            }
-
-            '<' | '>' => {
-                if pos + 1 < source.len() && source.chars().nth(pos + 1).unwrap() == '=' {
-                    tokens.push(ComparisonOperator(format!("{}=", ch)));
-                    pos += 2;
-                } else {
-                    tokens.push(ComparisonOperator(ch.to_string()));
-                    pos += 1;
-                }
-            }
-
-            '"' => {
-                let start = pos + 1;
-                pos += 1;
-                while pos < source.len() && source.chars().nth(pos).unwrap() != '"' {
-                    pos += 1;
-                }
-                tokens.push(Str(source[start..pos].to_string()));
-                pos += 1;
-            }
-
-            ',' => {
-                tokens.push(Comma);
-                pos += 1;
-            }
-
-            ';' => {
-                tokens.push(SemiColon);
-                pos += 1;
-            }
-
-            ':' => {
-                tokens.push(Colon);
-                pos += 1;
-            }
-            '.' => {
-                tokens.push(Dot);
-                pos += 1;
-            }
-
-            '+' | '-' | '*' | '%' | '^' => {
-                tokens.push(Operator(ch));
-                pos += 1;
-            }
-
-            _ if ch.is_ascii_digit() || ch == '.' => {
-                let start = pos;
-                while pos < source.len()
-                    && (source.chars().nth(pos).unwrap().is_ascii_digit()
-                        || source.chars().nth(pos).unwrap() == '.')
-                {
-                    pos += 1;
-                }
-                let num = &source[start..pos];
-                if num.contains('.') {
-                    tokens.push(Float(num.parse().unwrap()));
-                } else {
-                    tokens.push(Int(num.parse().unwrap()));
-                }
-            }
-            _ if is_valid_identifier_char(ch) => {
-                let start = pos;
-                while pos < source.len()
-                    && is_valid_identifier_char(source.chars().nth(pos).unwrap())
-                {
-                    pos += 1;
-                }
-                let identifier = &source[start..pos];
-                match identifier {
-                    "false" | "true" => {
-                        tokens.push(Bool(identifier.parse().unwrap()));
-                    }
-                    "if" | "else" | "while" | "for" | "function" | "var" | "return" | "const"
-                    | "let" => {
-                        tokens.push(Keyword(identifier.to_string()));
-                    }
-                    _ => tokens.push(Identifier(identifier.to_string())),
-                }
-            }
-
-            _ => {
-                return Err(LexerError::UnexpectedCharacter(ch));
-            }
-        }
-    }
-
-    Ok(tokens)
-}
-
 fn is_valid_identifier_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '_'
+}
+
+pub struct Lexer<'a> {
+    chars: std::iter::Peekable<std::str::Chars<'a>>,
+    tokens: Vec<Token>,
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str) -> Self {
+        Self {
+            chars: source.chars().peekable(),
+            tokens: Vec::new(),
+        }
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        self.chars.next()
+    }
+
+    fn peek(&mut self) -> Option<&char> {
+        self.chars.peek()
+    }
+
+    fn push_token(&mut self, token: Token) {
+        self.tokens.push(token);
+        self.advance();
+    }
+
+    pub fn tokenize(&mut self) -> Result<Vec<Token>, LexerError> {
+        while let Some(&ch) = self.peek() {
+            match ch {
+                '/' => self.handle_comment_or_div(),
+                '\n' | '\t' | ' ' => {
+                    self.advance();
+                }
+                '(' | ')' | '{' | '}' | '[' | ']' => self.push_token(Paren(ch)),
+                '=' | '!' | '<' | '>' => self.handle_comparison_or_operator(ch),
+                '"' => self.handle_string_literal(),
+                ',' => self.push_token(Comma),
+                ';' => self.push_token(SemiColon),
+                ':' => self.push_token(Colon),
+                '.' => self.push_token(Dot),
+                '+' | '-' | '*' | '%' | '^' => self.push_token(Operator(ch)),
+                _ if ch.is_ascii_digit() => self.handle_number(),
+                _ if is_valid_identifier_char(ch) => self.handle_identifier(),
+                _ => return Err(LexerError::UnexpectedCharacter(ch)),
+            }
+        }
+        Ok(std::mem::take(&mut self.tokens))
+    }
+
+    fn handle_comment_or_div(&mut self) {
+        self.advance();
+        if let Some(&'/') = self.peek() {
+            self.advance();
+            while let Some(&next_ch) = self.peek() {
+                if next_ch == '\n' {
+                    break;
+                }
+                self.advance();
+            }
+        } else {
+            self.tokens.push(Operator('/'));
+        }
+    }
+
+    fn handle_comparison_or_operator(&mut self, ch: char) {
+        self.advance();
+        if let Some(&'=') = self.peek() {
+            self.advance();
+            self.tokens.push(ComparisonOperator(format!("{}=", ch)));
+        } else {
+            self.tokens.push(match ch {
+                '<' | '>' => ComparisonOperator(ch.to_string()),
+                _ => Operator(ch),
+            });
+        }
+    }
+
+    fn handle_string_literal(&mut self) {
+        self.advance();
+        let mut string_literal = String::new();
+        while let Some(&next_ch) = self.peek() {
+            if next_ch == '"' {
+                break;
+            }
+            string_literal.push(next_ch);
+            self.advance();
+        }
+        self.advance(); // consume closing quote
+        self.tokens.push(Str(string_literal));
+    }
+
+    fn handle_number(&mut self) {
+        let mut number = String::new();
+        let mut is_float = false;
+        while let Some(&next_ch) = self.peek() {
+            if next_ch.is_ascii_digit() || next_ch == '.' {
+                if next_ch == '.' {
+                    is_float = true;
+                }
+                number.push(next_ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        if is_float {
+            self.tokens.push(Float(number.parse().unwrap()));
+        } else {
+            self.tokens.push(Int(number.parse().unwrap()));
+        }
+    }
+
+    fn handle_identifier(&mut self) {
+        let mut identifier = String::new();
+        while let Some(&next_ch) = self.peek() {
+            if is_valid_identifier_char(next_ch) {
+                identifier.push(next_ch);
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        match identifier.as_str() {
+            "false" | "true" => self.tokens.push(Bool(identifier.parse().unwrap())),
+            "if" | "else" | "while" | "for" | "function" | "var" | "return" | "const" | "let" => {
+                self.tokens.push(Keyword(identifier));
+            }
+            _ => self.tokens.push(Identifier(identifier)),
+        }
+    }
 }
 
 #[test]
@@ -211,7 +191,9 @@ fn test_tokenize() {
     }
     "#;
 
-    let tokens = tokenize(source).unwrap();
+    let mut lexer = Lexer::new(source);
+
+    let tokens = lexer.tokenize().unwrap();
     let expected = vec![
         Keyword("const".to_string()),
         Identifier("f".to_string()),
