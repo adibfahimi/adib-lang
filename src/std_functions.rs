@@ -75,3 +75,14 @@ pub fn std_free(args: &[Expr], env: &mut Environment) -> Expr {
         _ => panic!("Invalid argument for free"),
     }
 }
+
+pub fn std_panic(args: Vec<Expr>) -> Expr {
+    if args.len() != 1 {
+        panic!("panic expects exactly one argument");
+    }
+    let arg = &args[0];
+    if let Expr::Str(s) = arg {
+        panic!("{}", s);
+    }
+    panic!("Invalid argument for panic");
+}

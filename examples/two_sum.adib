@@ -1,0 +1,15 @@
+function twoSum(nums, target) {
+  for (let i = 0; i < nums.length; i = i + 1) {
+    for (let j = i + 1; j < nums.length; j = j + 1) {
+      const sum = nums[i] + nums[j];
+      if (sum == target) {
+        print(i, j);
+        panic("found");
+      }
+    }
+  }
+}
+
+const nums = [2, 7, 11, 15];
+
+twoSum(nums, 9)

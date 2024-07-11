@@ -1,11 +1,14 @@
 use super::{parse_expr, Expr};
 use crate::lexer::Token;
+
 use Token::*;
 
 pub fn parse_string(tokens: &[Token], s: String) -> (Expr, usize) {
+    
     if tokens.len() > 1 {
         match tokens[1] {
             Operator(op) => {
+                
                 let (expr, n) = parse_expr(&tokens[2..]);
                 (
                     Expr::Op {
@@ -17,6 +20,7 @@ pub fn parse_string(tokens: &[Token], s: String) -> (Expr, usize) {
                 )
             }
             ComparisonOperator(ref op) => {
+                
                 let (expr, n) = parse_expr(&tokens[2..]);
                 (
                     Expr::Comparison {
@@ -27,9 +31,13 @@ pub fn parse_string(tokens: &[Token], s: String) -> (Expr, usize) {
                     n + 2,
                 )
             }
-            _ => (Expr::Str(s.clone()), 1),
+            _ => {
+                
+                (Expr::Str(s.clone()), 1)
+            }
         }
     } else {
+        
         (Expr::Str(s.clone()), 1)
     }
 }
