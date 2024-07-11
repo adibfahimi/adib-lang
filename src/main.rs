@@ -16,6 +16,6 @@ fn main() {
     let mut env = eval::Environment::new();
 
     for ast in asts {
-        eval::eval(&ast, &mut env);
+        eval::eval(&ast, &mut env).expect("error while evaluating");
     }
 }
