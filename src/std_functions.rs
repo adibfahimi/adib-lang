@@ -82,7 +82,8 @@ pub fn std_panic(args: Vec<Expr>) -> Expr {
     }
     let arg = &args[0];
     if let Expr::Str(s) = arg {
-        panic!("{}", s);
+        println!("Panic: {}", s);
+        std::process::exit(1);
     }
     panic!("Invalid argument for panic");
 }
