@@ -1,4 +1,4 @@
-use crate::{parser::Expr, std_functions};
+use crate::{lexer::Token, parser::Expr, std_functions};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -25,6 +25,10 @@ impl Environment {
 
     pub fn set(&mut self, key: String, value: Expr) {
         self.mem.insert(key, value);
+    }
+
+    pub fn remove(&mut self, key: &str) {
+        self.mem.remove(key);
     }
 }
 
@@ -191,18 +195,27 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             match name.as_str() {
                 "print" => std_functions::std_print(results),
                 "sqrt" => std_functions::std_sqrt(results),
-                "free" => std_functions::std_free(results),
+                "free" => std_functions::std_free(args, env),
                 _ => match env.get(name) {
-                    Some(Expr::FunctionDef { name, args, body }) => {
-                        _ = name;
-                        let mut new_env = env.clone();
-                        for (param, result) in args.iter().zip(results.iter()) {
-                            new_env.set(param.to_string(), result.clone());
+                    Some(Expr::FunctionDef {
+                        name: _,
+                        args: argss,
+                        body,
+                    }) => {
+                        let mut new_env = Environment::new();
+
+                        for (arg, value) in argss.iter().zip(results.iter()) {
+                            match arg {
+                                Token::Identifier(name) => {
+                                    new_env.set(name.clone(), value.clone());
+                                }
+                                _ => panic!("Invalid argument"),
+                            }
                         }
-                        body.iter()
-                            .map(|expr| eval(expr, &mut new_env))
-                            .last()
-                            .unwrap_or_else(|| Expr::Str("".to_string()))
+
+                        body.iter().fold(Expr::Str("".to_string()), |_, expr| {
+                            eval(expr, &mut new_env)
+                        })
                     }
                     _ => panic!("{} is not a function", name),
                 },
