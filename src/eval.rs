@@ -165,6 +165,21 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                 }
             }
 
+            if name == "free" {
+                if args.len() != 1 {
+                    panic!("free expects exactly one argument");
+                }
+
+                match &args[0] {
+                    Expr::Identifier(s) => {
+                        env.mem.remove(s);
+                    }
+                    _ => panic!("free expects an identifier"),
+                }
+
+                return Expr::Nop;
+            }
+
             let mut results = Vec::new();
             for arg in args {
                 results.push(eval(arg, env));
