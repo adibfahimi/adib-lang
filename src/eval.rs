@@ -137,17 +137,21 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             match condition {
                 Expr::Bool(b) => {
                     if b {
-                        let mut result = None;
                         for then_expr in then_block {
-                            result = Some(eval(then_expr, env));
+                            let res = eval(then_expr, env);
+                            if let Expr::Return(_) = res {
+                                return res;
+                            }
                         }
-                        result.expect("then_block cannot be empty")
                     } else {
                         for else_expr in else_block {
-                            eval(else_expr, env);
+                            let res = eval(else_expr, env);
+                            if let Expr::Return(_) = res {
+                                return res;
+                            }
                         }
-                        Expr::Str("".to_string())
                     }
+                    Expr::Str("".to_string())
                 }
                 _ => panic!("Condition must be a boolean"),
             }
@@ -213,9 +217,14 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                             }
                         }
 
-                        body.iter().fold(Expr::Str("".to_string()), |_, expr| {
-                            eval(expr, &mut new_env)
-                        })
+                        for expr in body {
+                            let res = eval(expr, &mut new_env);
+                            if let Expr::Return(d) = res {
+                                return eval(&d, &mut new_env);
+                            }
+                        }
+
+                        Expr::Str("".to_string())
                     }
                     _ => panic!("{} is not a function", name),
                 },
@@ -232,7 +241,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             );
             Expr::Str("".to_string())
         }
-        Expr::Return(e) => eval(e, env),
+        Expr::Return(e) => Expr::Return(e.clone()),
         Expr::While { cond, block } => {
             let mut result = None;
             while eval(cond, env) == Expr::Bool(true) {
@@ -257,6 +266,10 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
                     result = Some(eval(expr, env));
                 }
                 eval(step, env);
+            }
+
+            if let Expr::Variable { name, value: _ } = init.as_ref() {
+                env.remove(name);
             }
 
             result.unwrap_or_else(|| Expr::Str("".to_string()))
