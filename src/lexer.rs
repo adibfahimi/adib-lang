@@ -10,7 +10,8 @@ pub enum LexerError {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Identifier(String),
-    Num(i64),
+    Int(i64),
+    Float(f64),
     Str(String),
     Bool(bool),
 
@@ -31,7 +32,8 @@ impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Identifier(s) => write!(f, "Identifier({})", s),
-            Num(n) => write!(f, "Num({})", n),
+            Int(n) => write!(f, "Num({})", n),
+            Float(d) => write!(f, "Float({})", d),
             Str(s) => write!(f, "Str({})", s),
             Bool(b) => write!(f, "Bool({})", b),
             Paren(c) => write!(f, "Paren({})", c),
@@ -131,13 +133,20 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, LexerError> {
                 pos += 1;
             }
 
-            _ if ch.is_ascii_digit() => {
+            _ if ch.is_ascii_digit() || ch == '.' => {
                 let start = pos;
-                while pos < source.len() && source.chars().nth(pos).unwrap().is_ascii_digit() {
+                while pos < source.len()
+                    && (source.chars().nth(pos).unwrap().is_ascii_digit()
+                        || source.chars().nth(pos).unwrap() == '.')
+                {
                     pos += 1;
                 }
-                let num = source[start..pos].parse().unwrap();
-                tokens.push(Num(num));
+                let num = &source[start..pos];
+                if num.contains('.') {
+                    tokens.push(Float(num.parse().unwrap()));
+                } else {
+                    tokens.push(Int(num.parse().unwrap()));
+                }
             }
             _ if is_valid_identifier_char(ch) => {
                 let start = pos;
@@ -175,6 +184,7 @@ fn is_valid_identifier_char(ch: char) -> bool {
 #[test]
 fn test_tokenize() {
     let source = r#"
+    const f = 3.5;
     // sum of two numbers
     function sum(a, b) {
         return a + b;
@@ -203,6 +213,11 @@ fn test_tokenize() {
 
     let tokens = tokenize(source).unwrap();
     let expected = vec![
+        Keyword("const".to_string()),
+        Identifier("f".to_string()),
+        Operator('='),
+        Float(3.5),
+        SemiColon,
         Keyword("function".to_string()),
         Identifier("sum".to_string()),
         Paren('('),
@@ -220,12 +235,12 @@ fn test_tokenize() {
         Keyword("var".to_string()),
         Identifier("a".to_string()),
         Operator('='),
-        Num(1),
+        Int(1),
         SemiColon,
         Keyword("var".to_string()),
         Identifier("b".to_string()),
         Operator('='),
-        Num(2),
+        Int(2),
         SemiColon,
         Keyword("var".to_string()),
         Identifier("c".to_string()),
@@ -242,17 +257,17 @@ fn test_tokenize() {
         Keyword("var".to_string()),
         Identifier("i".to_string()),
         Operator('='),
-        Num(0),
+        Int(0),
         SemiColon,
         Identifier("i".to_string()),
         ComparisonOperator("<".to_string()),
-        Num(10),
+        Int(10),
         SemiColon,
         Identifier("i".to_string()),
         Operator('='),
         Identifier("i".to_string()),
         Operator('+'),
-        Num(1),
+        Int(1),
         Paren(')'),
         Paren('{'),
         Identifier("print".to_string()),
@@ -265,7 +280,7 @@ fn test_tokenize() {
         Paren('('),
         Identifier("a".to_string()),
         ComparisonOperator("<".to_string()),
-        Num(10),
+        Int(10),
         Paren(')'),
         Paren('{'),
         Identifier("print".to_string()),
@@ -277,14 +292,14 @@ fn test_tokenize() {
         Operator('='),
         Identifier("a".to_string()),
         Operator('+'),
-        Num(1),
+        Int(1),
         SemiColon,
         Paren('}'),
         Keyword("if".to_string()),
         Paren('('),
         Identifier("a".to_string()),
         ComparisonOperator(">".to_string()),
-        Num(10),
+        Int(10),
         Paren(')'),
         Paren('{'),
         Identifier("print".to_string()),

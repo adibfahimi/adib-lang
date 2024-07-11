@@ -34,9 +34,10 @@ impl Environment {
 
 pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
     match expr {
-        Expr::Nop => Expr::Number(0),
+        Expr::Nop => Expr::Int(0),
         Expr::Bool(b) => Expr::Bool(*b),
-        Expr::Number(n) => Expr::Number(*n),
+        Expr::Int(n) => Expr::Int(*n),
+        Expr::Float(f) => Expr::Float(*f),
         Expr::Str(s) => Expr::Str(s.clone()),
         Expr::Object(list) => Expr::Object(list.clone()),
         Expr::Array(list) => Expr::Array(list.clone()),
@@ -48,7 +49,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             let obj = env.get(name).expect("Object not found").clone();
             match obj {
                 Expr::Array(list) => {
-                    if let Expr::Number(i) = eval(index, env) {
+                    if let Expr::Int(i) = eval(index, env) {
                         return list[i as usize].clone();
                     }
                     panic!("Index must be a number");
@@ -71,7 +72,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
 
                 Expr::Array(list) => {
                     if member == "length" {
-                        return Expr::Number(list.len() as i64);
+                        return Expr::Int(list.len() as i64);
                     }
                     panic!("Index must be a number");
                 }
@@ -84,20 +85,48 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             let r = eval(rhs, env);
 
             match (l, r) {
-                (Expr::Number(l), Expr::Number(r)) => match op {
-                    '+' => Expr::Number(l + r),
-                    '-' => Expr::Number(l - r),
-                    '*' => Expr::Number(l * r),
-                    '/' => Expr::Number(l / r),
+                (Expr::Int(l), Expr::Int(r)) => match op {
+                    '+' => Expr::Int(l + r),
+                    '-' => Expr::Int(l - r),
+                    '*' => Expr::Int(l * r),
+                    '/' => Expr::Int(l / r),
                     '>' => Expr::Bool(l > r),
                     '<' => Expr::Bool(l < r),
                     _ => panic!("Invalid operator {}", op),
                 },
+                (Expr::Float(l), Expr::Float(r)) => match op {
+                    '+' => Expr::Float(l + r),
+                    '-' => Expr::Float(l - r),
+                    '*' => Expr::Float(l * r),
+                    '/' => Expr::Float(l / r),
+                    '>' => Expr::Bool(l > r),
+                    '<' => Expr::Bool(l < r),
+                    _ => panic!("Invalid operator {}", op),
+                },
+                (Expr::Int(l), Expr::Float(r)) => match op {
+                    '+' => Expr::Float(l as f64 + r),
+                    '-' => Expr::Float(l as f64 - r),
+                    '*' => Expr::Float(l as f64 * r),
+                    '/' => Expr::Float(l as f64 / r),
+                    '>' => Expr::Bool(l as f64 > r),
+                    '<' => Expr::Bool((l as f64) < r),
+                    _ => panic!("Invalid operator {}", op),
+                },
+                (Expr::Float(l), Expr::Int(r)) => match op {
+                    '+' => Expr::Float(l + r as f64),
+                    '-' => Expr::Float(l - r as f64),
+                    '*' => Expr::Float(l * r as f64),
+                    '/' => Expr::Float(l / r as f64),
+                    '>' => Expr::Bool(l > r as f64),
+                    '<' => Expr::Bool(l < r as f64),
+                    _ => panic!("Invalid operator {}", op),
+                },
+
                 (Expr::Str(l), Expr::Str(r)) => match op {
                     '+' => Expr::Str(l + &r),
                     _ => panic!("Invalid operator {}", op),
                 },
-                (Expr::Str(l), Expr::Number(r)) => match op {
+                (Expr::Str(l), Expr::Int(r)) => match op {
                     '+' => Expr::Str(l + &r.to_string()),
                     _ => panic!("Invalid operator {}", op),
                 },
@@ -109,7 +138,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             let r = eval(rhs, env);
 
             match (l, r) {
-                (Expr::Number(l), Expr::Number(r)) => match op.as_str() {
+                (Expr::Int(l), Expr::Int(r)) => match op.as_str() {
                     "==" => Expr::Bool(l == r),
                     "!=" => Expr::Bool(l != r),
                     "<" => Expr::Bool(l < r),
@@ -162,7 +191,8 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             let value = eval(value, env);
 
             match value {
-                Expr::Number(_)
+                Expr::Int(_)
+                | Expr::Float(_)
                 | Expr::Str(_)
                 | Expr::Bool(_)
                 | Expr::Object(_)
@@ -181,11 +211,7 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             }
 
             match value {
-                Expr::Number(_)
-                | Expr::Str(_)
-                | Expr::Bool(_)
-                | Expr::Object(_)
-                | Expr::Array(_) => {
+                Expr::Int(_) | Expr::Str(_) | Expr::Bool(_) | Expr::Object(_) | Expr::Array(_) => {
                     env.set(name.clone(), value.clone());
                     value
                 }
