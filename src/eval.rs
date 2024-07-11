@@ -1,19 +1,5 @@
-use crate::parser::Expr;
+use crate::{parser::Expr, std_functions};
 use std::collections::HashMap;
-
-fn std_print(args: Vec<Expr>) -> Expr {
-    let mut output = String::new();
-    for arg in args {
-        match arg {
-            Expr::Number(n) => output.push_str(&format!("{}", n)),
-            Expr::Str(s) => output.push_str(&s),
-            Expr::Bool(b) => output.push_str(&format!("{}", b)),
-            _ => panic!("Invalid argument for print"),
-        }
-    }
-    println!("{}", output);
-    Expr::Str(output)
-}
 
 #[derive(Debug, Clone)]
 pub struct Environment {
@@ -39,14 +25,51 @@ impl Environment {
 pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
     // println!("Evaluating {:?}", expr);
     match expr {
-        Expr::Nop => Expr::Number(0), // TODO: Remove this
+        Expr::Nop => Expr::Number(0),
         Expr::Bool(b) => Expr::Bool(*b),
         Expr::Number(n) => Expr::Number(*n),
         Expr::Str(s) => Expr::Str(s.clone()),
+        Expr::Object(list) => Expr::Object(list.clone()),
+        Expr::Array(list) => Expr::Array(list.clone()),
         Expr::Identifier(s) => match env.get(s) {
             Some(v) => v.clone(),
             None => panic!("Variable {} not found", s),
         },
+        Expr::ArrayIndex { name, index } => {
+            let obj = env.get(name).expect("Object not found").clone();
+            match obj {
+                Expr::Array(list) => {
+                    if let Expr::Number(i) = eval(index, env) {
+                        return list[i as usize].clone();
+                    }
+                    panic!("Index must be a number");
+                }
+                _ => panic!("{} is not an array", name),
+            }
+        }
+        Expr::Member { name, member } => {
+            let obj = env.get(name).expect("Object not found").clone();
+            match obj {
+                Expr::Object(list) => {
+                    for (key, value) in list {
+                        if &key == member {
+                            return *value.clone();
+                        }
+                    }
+
+                    panic!("Member {} not found in object {}", member, name);
+                }
+
+                Expr::Array(list) => {
+                    if member == "length" {
+                        return Expr::Number(list.len() as i64);
+                    }
+                    panic!("Index must be a number");
+                }
+
+                _ => panic!("{} is not an object", name),
+            }
+        }
         Expr::Op { op, lhs, rhs } => {
             let l = eval(lhs, env);
             let r = eval(rhs, env);
@@ -124,7 +147,11 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             let value = eval(value, env);
 
             match value {
-                Expr::Number(_) | Expr::Str(_) | Expr::Bool(_) => {
+                Expr::Number(_)
+                | Expr::Str(_)
+                | Expr::Bool(_)
+                | Expr::Object(_)
+                | Expr::Array(_) => {
                     env.set(name.clone(), value.clone());
                     value
                 }
@@ -139,7 +166,11 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             }
 
             match value {
-                Expr::Number(_) | Expr::Str(_) | Expr::Bool(_) => {
+                Expr::Number(_)
+                | Expr::Str(_)
+                | Expr::Bool(_)
+                | Expr::Object(_)
+                | Expr::Array(_) => {
                     env.set(name.clone(), value.clone());
                     value
                 }
@@ -147,56 +178,29 @@ pub fn eval(expr: &Expr, env: &mut Environment) -> Expr {
             }
         }
         Expr::FunctionCall { name, args } => {
-            if name == "print" {
-                let mut results = Vec::new();
-                for arg in args {
-                    results.push(eval(arg, env));
-                }
-                return std_print(results);
-            }
-
-            if name == "sqrt" {
-                if args.len() != 1 {
-                    panic!("sqrt expects exactly one argument");
-                }
-                let arg = eval(&args[0], env);
-                if let Expr::Number(n) = arg {
-                    return Expr::Number((n as f64).sqrt() as i64);
-                }
-            }
-
-            if name == "free" {
-                if args.len() != 1 {
-                    panic!("free expects exactly one argument");
-                }
-
-                match &args[0] {
-                    Expr::Identifier(s) => {
-                        env.mem.remove(s);
-                    }
-                    _ => panic!("free expects an identifier"),
-                }
-
-                return Expr::Nop;
-            }
-
             let mut results = Vec::new();
             for arg in args {
                 results.push(eval(arg, env));
             }
-            match env.get(name) {
-                Some(Expr::FunctionDef { name, args, body }) => {
-                    _ = name;
-                    let mut new_env = env.clone();
-                    for (param, result) in args.iter().zip(results.iter()) {
-                        new_env.set(param.to_string(), result.clone());
+
+            match name.as_str() {
+                "print" => std_functions::std_print(results),
+                "sqrt" => std_functions::std_sqrt(results),
+                "free" => std_functions::std_free(results),
+                _ => match env.get(name) {
+                    Some(Expr::FunctionDef { name, args, body }) => {
+                        _ = name;
+                        let mut new_env = env.clone();
+                        for (param, result) in args.iter().zip(results.iter()) {
+                            new_env.set(param.to_string(), result.clone());
+                        }
+                        body.iter()
+                            .map(|expr| eval(expr, &mut new_env))
+                            .last()
+                            .unwrap_or_else(|| Expr::Str("".to_string()))
                     }
-                    body.iter()
-                        .map(|expr| eval(expr, &mut new_env))
-                        .last()
-                        .unwrap_or_else(|| Expr::Str("".to_string()))
-                }
-                _ => panic!("{} is not a function", name),
+                    _ => panic!("{} is not a function", name),
+                },
             }
         }
         Expr::FunctionDef { name, args, body } => {

@@ -1,4 +1,4 @@
-use super::{parse_expr, parse_if, Expr};
+use super::{parse_array::parse_array, parse_expr, parse_if, parse_object::parse_object, Expr};
 use crate::lexer::Token;
 use Token::*;
 
@@ -9,24 +9,44 @@ pub fn parse_keyword(tokens: &[Token], key: &String) -> (Expr, usize) {
             let (expr, n) = parse_expr(&tokens[1..]);
             (Expr::Return(Box::new(expr)), n + 1)
         }
-        "var" => {
+        "var" | "let" | "const" => {
             let name = match tokens[1] {
                 Identifier(ref s) => s.clone(),
                 _ => panic!("Expected identifier after let/var"),
             };
 
-            let expr = match tokens[2] {
-                Operator('=') => parse_expr(&tokens[3..]),
-                _ => panic!("Expected = after {}", key),
-            };
+            if tokens[2] != Operator('=') {
+                panic!("Expected = after {}", key);
+            }
 
-            (
-                Expr::Variable {
-                    name,
-                    value: Box::new(expr.0),
-                },
-                3 + expr.1,
-            )
+            if tokens[3] == Paren('{') {
+                let (expr, n) = parse_object(&tokens[3..]);
+                (
+                    Expr::Variable {
+                        name,
+                        value: Box::new(expr),
+                    },
+                    3 + n,
+                )
+            } else if tokens[3] == Paren('[') {
+                let (expr, n) = parse_array(&tokens[3..]);
+                (
+                    Expr::Variable {
+                        name,
+                        value: Box::new(expr),
+                    },
+                    3 + n,
+                )
+            } else {
+                let (value, n) = parse_expr(&tokens[3..]);
+                (
+                    Expr::Variable {
+                        name,
+                        value: Box::new(value),
+                    },
+                    3 + n,
+                )
+            }
         }
         "function" => {
             let name = match tokens[1] {
