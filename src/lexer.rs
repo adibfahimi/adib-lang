@@ -21,10 +21,6 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "in" => TokenKind::In,
 };
 
-fn parse_keyword(keyword: &str) -> Option<TokenKind> {
-    KEYWORDS.get(keyword).cloned()
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Identifier,
@@ -319,9 +315,9 @@ impl Lexer {
             }
         }
 
-        if let Some(token_kind) = parse_keyword(&value) {
+        if let Some(token_kind) = KEYWORDS.get(&value) {
             Ok(Token {
-                kind: token_kind,
+                kind: token_kind.clone(),
                 value,
             })
         } else {
