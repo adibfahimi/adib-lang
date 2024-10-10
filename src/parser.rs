@@ -132,13 +132,13 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(lexer: &'a mut Lexer) -> Self {
-        let current_token = lexer.next_token();
-        Self {
+    pub fn new(lexer: &'a mut Lexer) -> Result<Self, String> {
+        let current_token = lexer.next_token()?;
+        Ok(Self {
             lexer,
             current_token,
             variables: HashMap::new(),
-        }
+        })
     }
 
     pub fn parse(&mut self) -> Result<Program, String> {
@@ -574,7 +574,7 @@ impl<'a> Parser<'a> {
 
     fn consume(&mut self, expected_kind: TokenKind) -> Result<(), String> {
         if self.current_token.kind == expected_kind {
-            self.current_token = self.lexer.next_token();
+            self.current_token = self.lexer.next_token()?;
             Ok(())
         } else {
             Err(format!(
