@@ -1,13 +1,28 @@
 use crate::error::Position;
 
+/// A syntax node together with the source position where it begins.
+#[derive(Debug, Clone)]
+pub struct Spanned<T> {
+    pub node: T,
+    pub position: Position,
+}
+
+impl<T> Spanned<T> {
+    pub fn new(node: T, position: Position) -> Self {
+        Self { node, position }
+    }
+}
+
+pub type Statement = Spanned<StatementKind>;
+pub type Expression = Spanned<ExpressionKind>;
+
 #[derive(Debug, Clone)]
 pub struct Program {
     pub body: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Statement {
-    Spanned(Box<Statement>, Position),
+pub enum StatementKind {
     FunctionCall(FunctionCall),
     FunctionDeclaration(FunctionDeclaration),
     VariableDeclaration(VariableDeclaration),
@@ -21,18 +36,8 @@ pub enum Statement {
     Continue,
 }
 
-impl Statement {
-    pub fn position(&self) -> Option<Position> {
-        match self {
-            Statement::Spanned(_, position) => Some(*position),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
-pub enum Expression {
-    Spanned(Box<Expression>, Position),
+pub enum ExpressionKind {
     StringLiteral(String),
     NumberLiteral(f64),
     BooleanLiteral(bool),
@@ -57,16 +62,6 @@ pub enum Expression {
         array: Box<Expression>,
         index: Box<Expression>,
     },
-}
-
-impl Expression {
-    pub fn position(&self) -> Option<Position> {
-        match self {
-            Expression::Spanned(_, position) => Some(*position),
-            Expression::FunctionCall(call) => Some(call.position()),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -148,14 +143,6 @@ impl AssignmentOperator {
 pub struct FunctionCall {
     pub name: String,
     pub arguments: Vec<Expression>,
-    pub line: usize,
-    pub column: usize,
-}
-
-impl FunctionCall {
-    pub fn position(&self) -> Position {
-        Position::new(self.line, self.column)
-    }
 }
 
 #[derive(Debug, Clone)]

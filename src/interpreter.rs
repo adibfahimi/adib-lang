@@ -37,7 +37,7 @@ impl Interpreter {
 
     pub fn eval(&mut self, program: &Program) -> Result<(), Diagnostic> {
         for statement in &program.body {
-            let position = statement.position();
+            let position = Some(statement.position);
             match self.exec_statement(statement)? {
                 Flow::Normal => {}
                 Flow::Return(_) => {
@@ -69,24 +69,29 @@ impl Interpreter {
     }
 
     fn exec_statement(&mut self, statement: &Statement) -> Result<Flow, Diagnostic> {
-        match statement {
-            Statement::Spanned(inner, position) => {
-                let previous = self.current_position;
-                self.current_position = Some(*position);
-                let result = self.exec_statement(inner);
-                self.current_position = previous;
-                result.map_err(|mut error| {
-                    if error.position.is_none() {
-                        error.position = Some(*position);
-                    }
-                    error
-                })
+        let previous = self.current_position;
+        self.current_position = Some(statement.position);
+        let result = self.exec_statement_kind(&statement.node, statement.position);
+        self.current_position = previous;
+        result.map_err(|mut error| {
+            if error.position.is_none() {
+                error.position = Some(statement.position);
             }
-            Statement::FunctionCall(func_call) => {
-                self.eval_function_call(func_call)?;
+            error
+        })
+    }
+
+    fn exec_statement_kind(
+        &mut self,
+        statement: &StatementKind,
+        position: Position,
+    ) -> Result<Flow, Diagnostic> {
+        match statement {
+            StatementKind::FunctionCall(func_call) => {
+                self.eval_function_call(func_call, position)?;
                 Ok(Flow::Normal)
             }
-            Statement::VariableDeclaration(var_decl) => {
+            StatementKind::VariableDeclaration(var_decl) => {
                 let value = match &var_decl.value {
                     Some(value) => self.eval_expression(value)?,
                     None => Value::Null,
@@ -96,14 +101,14 @@ impl Interpreter {
                     .define(var_decl.name.clone(), value, var_decl.is_const);
                 Ok(Flow::Normal)
             }
-            Statement::Assignment(assignment) => {
+            StatementKind::Assignment(assignment) => {
                 self.exec_assignment(assignment)?;
                 Ok(Flow::Normal)
             }
-            Statement::If(if_stmt) => self.eval_if_statement(if_stmt),
-            Statement::While(while_stmt) => self.eval_while_statement(while_stmt),
-            Statement::For(for_stmt) => self.eval_for_statement(for_stmt),
-            Statement::FunctionDeclaration(func_decl) => {
+            StatementKind::If(if_stmt) => self.eval_if_statement(if_stmt),
+            StatementKind::While(while_stmt) => self.eval_while_statement(while_stmt),
+            StatementKind::For(for_stmt) => self.eval_for_statement(for_stmt),
+            StatementKind::FunctionDeclaration(func_decl) => {
                 let function = FunctionValue {
                     declaration: Rc::new(func_decl.clone()),
                     closure: Rc::clone(&self.env),
@@ -115,16 +120,16 @@ impl Interpreter {
                 );
                 Ok(Flow::Normal)
             }
-            Statement::Return(expr) => {
+            StatementKind::Return(expr) => {
                 let value = match expr {
                     Some(expr) => self.eval_expression(expr)?,
                     None => Value::Null,
                 };
                 Ok(Flow::Return(value))
             }
-            Statement::Block(statements) => self.exec_block(statements),
-            Statement::Break => Ok(Flow::Break(self.current_position)),
-            Statement::Continue => Ok(Flow::Continue(self.current_position)),
+            StatementKind::Block(statements) => self.exec_block(statements),
+            StatementKind::Break => Ok(Flow::Break(Some(position))),
+            StatementKind::Continue => Ok(Flow::Continue(Some(position))),
         }
     }
 
@@ -162,9 +167,9 @@ impl Interpreter {
             AssignTarget::Index { root, indices } => {
                 let mut positions = Vec::with_capacity(indices.len());
                 for index in indices {
-                    let position = index.position().or(self.current_position);
+                    let position = index.position;
                     let value = self.eval_expression(index)?;
-                    positions.push(as_index(&value, position)?);
+                    positions.push(as_index(&value, Some(position))?);
                 }
 
                 let current = if assignment.operator == AssignmentOperator::Assign {
@@ -330,10 +335,14 @@ impl Interpreter {
         Ok(arguments)
     }
 
-    fn eval_function_call(&mut self, func_call: &FunctionCall) -> Result<Value, Diagnostic> {
+    fn eval_function_call(
+        &mut self,
+        func_call: &FunctionCall,
+        call_position: Position,
+    ) -> Result<Value, Diagnostic> {
         if let Some(builtin) = Builtin::from_name(&func_call.name) {
             let arguments = self.eval_arguments(func_call)?;
-            return match builtins::call(builtin, &arguments, func_call.position()) {
+            return match builtins::call(builtin, &arguments, call_position) {
                 Ok(BuiltinOutcome::Value(value)) => Ok(value),
                 Ok(BuiltinOutcome::Print(output)) => {
                     self.output.push_str(&output);
@@ -346,7 +355,7 @@ impl Interpreter {
         let callee = self.env.borrow().get(&func_call.name).ok_or_else(|| {
             Diagnostic::at(
                 format!("undefined function: {}", func_call.name),
-                func_call.position(),
+                call_position,
             )
             .with_stack(self.call_stack.clone())
         })?;
@@ -354,13 +363,13 @@ impl Interpreter {
         let Value::Function(function) = callee else {
             return Err(Diagnostic::at(
                 format!("`{}` is not a function", func_call.name),
-                func_call.position(),
+                call_position,
             )
             .with_stack(self.call_stack.clone()));
         };
 
         let arguments = self.eval_arguments(func_call)?;
-        self.call_function(&function, arguments, func_call.position())
+        self.call_function(&function, arguments, call_position)
     }
 
     fn call_function(
@@ -419,26 +428,31 @@ impl Interpreter {
         }
     }
 
-    fn eval_expression(&mut self, expr: &Expression) -> Result<Value, Diagnostic> {
-        match expr {
-            Expression::Spanned(inner, position) => {
-                let previous = self.current_position;
-                self.current_position = Some(*position);
-                let result = self.eval_expression(inner);
-                self.current_position = previous;
-                result.map_err(|mut error| {
-                    if error.position.is_none() {
-                        error.position = Some(*position);
-                    }
-                    error
-                })
+    fn eval_expression(&mut self, expression: &Expression) -> Result<Value, Diagnostic> {
+        let previous = self.current_position;
+        self.current_position = Some(expression.position);
+        let result = self.eval_expression_kind(&expression.node, expression.position);
+        self.current_position = previous;
+        result.map_err(|mut error| {
+            if error.position.is_none() {
+                error.position = Some(expression.position);
             }
-            Expression::StringLiteral(s) => Ok(Value::String(s.clone())),
-            Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
-            Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
-            Expression::NullLiteral => Ok(Value::Null),
-            Expression::Identifier(name) => self.lookup_variable(name),
-            Expression::BinaryOperation {
+            error
+        })
+    }
+
+    fn eval_expression_kind(
+        &mut self,
+        expression: &ExpressionKind,
+        position: Position,
+    ) -> Result<Value, Diagnostic> {
+        match expression {
+            ExpressionKind::StringLiteral(s) => Ok(Value::String(s.clone())),
+            ExpressionKind::NumberLiteral(n) => Ok(Value::Number(*n)),
+            ExpressionKind::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
+            ExpressionKind::NullLiteral => Ok(Value::Null),
+            ExpressionKind::Identifier(name) => self.lookup_variable(name),
+            ExpressionKind::BinaryOperation {
                 left,
                 operator,
                 right,
@@ -463,23 +477,23 @@ impl Interpreter {
                 let right_value = self.eval_expression(right)?;
                 self.eval_binary_op(operator, left_value, right_value)
             }
-            Expression::UnaryOperation { operator, operand } => {
+            ExpressionKind::UnaryOperation { operator, operand } => {
                 let operand_value = self.eval_expression(operand)?;
                 self.eval_unary_op(operator, operand_value)
             }
-            Expression::FunctionCall(func_call) => self.eval_function_call(func_call),
-            Expression::ArrayLiteral(elements) => {
+            ExpressionKind::FunctionCall(func_call) => self.eval_function_call(func_call, position),
+            ExpressionKind::ArrayLiteral(elements) => {
                 let mut values = Vec::with_capacity(elements.len());
                 for element in elements {
                     values.push(self.eval_expression(element)?);
                 }
                 Ok(Value::Array(values))
             }
-            Expression::PropertyAccess { object, property } => {
+            ExpressionKind::PropertyAccess { object, property } => {
                 let object_value = self.eval_expression(object)?;
                 self.eval_property_access(object_value, property)
             }
-            Expression::ArrayIndexing { array, index } => {
+            ExpressionKind::ArrayIndexing { array, index } => {
                 let array_value = self.eval_expression(array)?;
                 let index_value = self.eval_expression(index)?;
                 self.eval_array_indexing(array_value, index_value)

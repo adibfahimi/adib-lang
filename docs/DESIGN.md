@@ -97,9 +97,13 @@ or semicolons.
 Assignment targets are restricted to variables and array elements. The parser
 flattens nested index targets such as `grid[row][column]` into a root name plus a
 list of index expressions, which the interpreter can evaluate once and then use
-for both reads and writes. Every statement and every operator expression is
-wrapped in a source span, so runtime failures can point at the exact operator
-rather than only the enclosing statement.
+for both reads and writes.
+
+Statements and expressions are represented as `Spanned<T>`: a node plus the
+source position where it begins. The node enums are `StatementKind` and
+`ExpressionKind`, so traversal never has to unwrap recursive span variants.
+Every operator expression carries its own span, which lets runtime failures
+point at the exact operator rather than only the enclosing statement.
 
 ## Values
 

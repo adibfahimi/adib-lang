@@ -2,7 +2,6 @@ use crate::ast::*;
 use crate::error::{Diagnostic, Position};
 use crate::lexer::{Lexer, Token, TokenKind};
 
-// Parser Implementation
 pub struct Parser<'a> {
     lexer: &'a mut Lexer,
     current_token: Token,
@@ -34,11 +33,11 @@ impl<'a> Parser<'a> {
     // Statement Parsing Methods
     fn parse_statement(&mut self) -> Result<Statement, Diagnostic> {
         let position = self.position();
-        let statement = self.parse_statement_inner()?;
-        Ok(Statement::Spanned(Box::new(statement), position))
+        let node = self.parse_statement_inner()?;
+        Ok(Spanned::new(node, position))
     }
 
-    fn parse_statement_inner(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_statement_inner(&mut self) -> Result<StatementKind, Diagnostic> {
         match self.current_token.kind {
             TokenKind::Identifier => self.parse_expression_statement(),
             TokenKind::Var | TokenKind::Const => self.parse_variable_declaration(),
@@ -50,11 +49,11 @@ impl<'a> Parser<'a> {
             TokenKind::LBrace => self.parse_block(),
             TokenKind::Break => {
                 self.consume(TokenKind::Break)?;
-                Ok(Statement::Break)
+                Ok(StatementKind::Break)
             }
             TokenKind::Continue => {
                 self.consume(TokenKind::Continue)?;
-                Ok(Statement::Continue)
+                Ok(StatementKind::Continue)
             }
             _ => self.error(format!(
                 "unexpected {}; expected a statement",
@@ -63,7 +62,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_statement(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_expression_statement(&mut self) -> Result<StatementKind, Diagnostic> {
         let position = self.position();
         let expression = self.parse_expression()?;
 
@@ -78,8 +77,8 @@ impl<'a> Parser<'a> {
             TokenKind::PlusPlus => (AssignmentOperator::Add, true),
             TokenKind::MinusMinus => (AssignmentOperator::Sub, true),
             _ => {
-                if let Expression::FunctionCall(call) = expression {
-                    return Ok(Statement::FunctionCall(call));
+                if let ExpressionKind::FunctionCall(call) = expression.node {
+                    return Ok(StatementKind::FunctionCall(call));
                 }
                 return self.error_at(
                     position,
@@ -91,12 +90,12 @@ impl<'a> Parser<'a> {
         self.consume(current_kind)?;
         let target = self.make_assignment_target(expression, position)?;
         let value = if increments {
-            Expression::NumberLiteral(1.0)
+            self.number_expression(1.0, position)
         } else {
             self.parse_expression()?
         };
 
-        Ok(Statement::Assignment(Assignment {
+        Ok(StatementKind::Assignment(Assignment {
             target,
             operator,
             value,
@@ -112,13 +111,12 @@ impl<'a> Parser<'a> {
         let mut current = expression;
 
         loop {
-            match current {
-                Expression::Spanned(inner, _) => current = *inner,
-                Expression::ArrayIndexing { array, index } => {
+            match current.node {
+                ExpressionKind::ArrayIndexing { array, index } => {
                     indices.push(*index);
                     current = *array;
                 }
-                Expression::Identifier(root) => {
+                ExpressionKind::Identifier(root) => {
                     if indices.is_empty() {
                         return Ok(AssignTarget::Variable(root));
                     }
@@ -135,7 +133,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_variable_declaration(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_variable_declaration(&mut self) -> Result<StatementKind, Diagnostic> {
         let is_const = self.current_token.kind == TokenKind::Const;
         self.consume(if is_const {
             TokenKind::Const
@@ -151,14 +149,14 @@ impl<'a> Parser<'a> {
             None
         };
 
-        Ok(Statement::VariableDeclaration(VariableDeclaration {
+        Ok(StatementKind::VariableDeclaration(VariableDeclaration {
             name,
             value,
             is_const,
         }))
     }
 
-    fn parse_if_statement(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_if_statement(&mut self) -> Result<StatementKind, Diagnostic> {
         self.consume(TokenKind::If)?;
         self.consume(TokenKind::LParen)?;
         let condition = self.parse_expression()?;
@@ -173,14 +171,14 @@ impl<'a> Parser<'a> {
             None
         };
 
-        Ok(Statement::If(IfStatement {
+        Ok(StatementKind::If(IfStatement {
             condition,
             then_branch,
             else_branch,
         }))
     }
 
-    fn parse_while_statement(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_while_statement(&mut self) -> Result<StatementKind, Diagnostic> {
         self.consume(TokenKind::While)?;
         self.consume(TokenKind::LParen)?;
         let condition = self.parse_expression()?;
@@ -188,10 +186,10 @@ impl<'a> Parser<'a> {
 
         let body = Box::new(self.parse_statement()?);
 
-        Ok(Statement::While(WhileStatement { condition, body }))
+        Ok(StatementKind::While(WhileStatement { condition, body }))
     }
 
-    fn parse_for_statement(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_for_statement(&mut self) -> Result<StatementKind, Diagnostic> {
         self.consume(TokenKind::For)?;
         self.consume(TokenKind::LParen)?;
 
@@ -205,7 +203,7 @@ impl<'a> Parser<'a> {
         let condition = if self.current_token.kind != TokenKind::SemiColon {
             self.parse_expression()?
         } else {
-            Expression::BooleanLiteral(true)
+            Spanned::new(ExpressionKind::BooleanLiteral(true), self.position())
         };
         self.consume(TokenKind::SemiColon)?;
 
@@ -218,7 +216,7 @@ impl<'a> Parser<'a> {
 
         let body = Box::new(self.parse_statement()?);
 
-        Ok(Statement::For(ForStatement {
+        Ok(StatementKind::For(ForStatement {
             init: Box::new(init),
             condition,
             update: Box::new(update),
@@ -228,11 +226,11 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement_with_span(&mut self) -> Result<Statement, Diagnostic> {
         let position = self.position();
-        let statement = self.parse_expression_statement()?;
-        Ok(Statement::Spanned(Box::new(statement), position))
+        let node = self.parse_expression_statement()?;
+        Ok(Spanned::new(node, position))
     }
 
-    fn parse_function_declaration(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_function_declaration(&mut self) -> Result<StatementKind, Diagnostic> {
         self.consume(TokenKind::Function)?;
         let name = self.expect_identifier()?;
         self.consume(TokenKind::LParen)?;
@@ -240,23 +238,23 @@ impl<'a> Parser<'a> {
         self.consume(TokenKind::RParen)?;
         let body = Box::new(self.parse_statement()?);
 
-        Ok(Statement::FunctionDeclaration(FunctionDeclaration {
+        Ok(StatementKind::FunctionDeclaration(FunctionDeclaration {
             name,
             parameters,
             body,
         }))
     }
 
-    fn parse_return_statement(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_return_statement(&mut self) -> Result<StatementKind, Diagnostic> {
         self.consume(TokenKind::Return)?;
         let value = match self.current_token.kind {
             TokenKind::RBrace | TokenKind::Eof | TokenKind::SemiColon => None,
             _ => Some(self.parse_expression()?),
         };
-        Ok(Statement::Return(value))
+        Ok(StatementKind::Return(value))
     }
 
-    fn parse_block(&mut self) -> Result<Statement, Diagnostic> {
+    fn parse_block(&mut self) -> Result<StatementKind, Diagnostic> {
         self.consume(TokenKind::LBrace)?;
         let mut statements = Vec::new();
         while self.current_token.kind != TokenKind::RBrace {
@@ -270,7 +268,7 @@ impl<'a> Parser<'a> {
             statements.push(self.parse_statement()?);
         }
         self.consume(TokenKind::RBrace)?;
-        Ok(Statement::Block(statements))
+        Ok(StatementKind::Block(statements))
     }
 
     // Expression Parsing Methods
@@ -376,11 +374,11 @@ impl<'a> Parser<'a> {
         let position = self.position();
         self.consume(self.current_token.kind.clone())?;
         let operand = self.parse_unary()?;
-        Ok(Expression::Spanned(
-            Box::new(Expression::UnaryOperation {
+        Ok(Spanned::new(
+            ExpressionKind::UnaryOperation {
                 operator,
                 operand: Box::new(operand),
-            }),
+            },
             position,
         ))
     }
@@ -397,22 +395,20 @@ impl<'a> Parser<'a> {
                     self.consume(TokenKind::LParen)?;
                     let arguments = self.parse_arguments()?;
                     self.consume(TokenKind::RParen)?;
-                    expr = Expression::FunctionCall(FunctionCall {
-                        name,
-                        arguments,
-                        line: expression_position.line,
-                        column: expression_position.column,
-                    });
+                    expr = Spanned::new(
+                        ExpressionKind::FunctionCall(FunctionCall { name, arguments }),
+                        expression_position,
+                    );
                 }
                 TokenKind::Dot => {
                     let position = self.position();
                     self.consume(TokenKind::Dot)?;
                     let property = self.expect_identifier()?;
-                    expr = Expression::Spanned(
-                        Box::new(Expression::PropertyAccess {
+                    expr = Spanned::new(
+                        ExpressionKind::PropertyAccess {
                             object: Box::new(expr),
                             property,
-                        }),
+                        },
                         position,
                     );
                 }
@@ -421,11 +417,11 @@ impl<'a> Parser<'a> {
                     self.consume(TokenKind::LBracket)?;
                     let index = self.parse_expression()?;
                     self.consume(TokenKind::RBracket)?;
-                    expr = Expression::Spanned(
-                        Box::new(Expression::ArrayIndexing {
+                    expr = Spanned::new(
+                        ExpressionKind::ArrayIndexing {
                             array: Box::new(expr),
                             index: Box::new(index),
-                        }),
+                        },
                         position,
                     );
                 }
@@ -445,11 +441,11 @@ impl<'a> Parser<'a> {
             return Ok(expr);
         }
 
-        let expression = match self.current_token.kind {
+        let node = match self.current_token.kind {
             TokenKind::String => {
                 let value = self.current_token.value.clone();
                 self.consume(TokenKind::String)?;
-                Expression::StringLiteral(value)
+                ExpressionKind::StringLiteral(value)
             }
             TokenKind::Number => {
                 let line = self.current_token.line;
@@ -459,24 +455,24 @@ impl<'a> Parser<'a> {
                         Diagnostic::at("invalid number", Position::new(line, column))
                     })?;
                 self.consume(TokenKind::Number)?;
-                Expression::NumberLiteral(value)
+                ExpressionKind::NumberLiteral(value)
             }
             TokenKind::True => {
                 self.consume(TokenKind::True)?;
-                Expression::BooleanLiteral(true)
+                ExpressionKind::BooleanLiteral(true)
             }
             TokenKind::False => {
                 self.consume(TokenKind::False)?;
-                Expression::BooleanLiteral(false)
+                ExpressionKind::BooleanLiteral(false)
             }
             TokenKind::Null => {
                 self.consume(TokenKind::Null)?;
-                Expression::NullLiteral
+                ExpressionKind::NullLiteral
             }
             TokenKind::Identifier => {
                 let name = self.current_token.value.clone();
                 self.consume(TokenKind::Identifier)?;
-                Expression::Identifier(name)
+                ExpressionKind::Identifier(name)
             }
             TokenKind::LBracket => self.parse_array_literal()?,
             _ => {
@@ -487,15 +483,19 @@ impl<'a> Parser<'a> {
             }
         };
 
-        Ok(Expression::Spanned(Box::new(expression), position))
+        Ok(Spanned::new(node, position))
     }
 
     // Helper Methods
-    fn parse_array_literal(&mut self) -> Result<Expression, Diagnostic> {
+    fn number_expression(&self, value: f64, position: Position) -> Expression {
+        Spanned::new(ExpressionKind::NumberLiteral(value), position)
+    }
+
+    fn parse_array_literal(&mut self) -> Result<ExpressionKind, Diagnostic> {
         self.consume(TokenKind::LBracket)?;
         let elements = self.parse_arguments()?;
         self.consume(TokenKind::RBracket)?;
-        Ok(Expression::ArrayLiteral(elements))
+        Ok(ExpressionKind::ArrayLiteral(elements))
     }
 
     fn parse_arguments(&mut self) -> Result<Vec<Expression>, Diagnostic> {
@@ -580,9 +580,8 @@ impl<'a> Parser<'a> {
 }
 
 fn identifier_name(expression: Expression) -> Option<String> {
-    match expression {
-        Expression::Spanned(inner, _) => identifier_name(*inner),
-        Expression::Identifier(name) => Some(name),
+    match expression.node {
+        ExpressionKind::Identifier(name) => Some(name),
         _ => None,
     }
 }
@@ -593,12 +592,12 @@ fn binary(
     right: Expression,
     position: Position,
 ) -> Expression {
-    Expression::Spanned(
-        Box::new(Expression::BinaryOperation {
+    Spanned::new(
+        ExpressionKind::BinaryOperation {
             left: Box::new(left),
             operator,
             right: Box::new(right),
-        }),
+        },
         position,
     )
 }
@@ -623,38 +622,24 @@ mod tests {
         parser.parse().expect("source should parse")
     }
 
-    fn inner_statement(statement: &Statement) -> &Statement {
-        match statement {
-            Statement::Spanned(inner, _) => inner_statement(inner),
-            other => other,
-        }
-    }
-
-    fn inner_expression(expression: &Expression) -> &Expression {
-        match expression {
-            Expression::Spanned(inner, _) => inner_expression(inner),
-            other => other,
-        }
-    }
-
     #[test]
     fn multiplication_binds_tighter_than_addition() {
         let program = parse("print(1 + 2 * 3)");
 
-        let Statement::FunctionCall(call) = inner_statement(&program.body[0]) else {
+        let StatementKind::FunctionCall(call) = &program.body[0].node else {
             panic!("expected function call");
         };
-        let Expression::BinaryOperation {
+        let ExpressionKind::BinaryOperation {
             operator: BinaryOperator::Add,
             right,
             ..
-        } = inner_expression(&call.arguments[0])
+        } = &call.arguments[0].node
         else {
             panic!("expected addition at the root");
         };
         assert!(matches!(
-            inner_expression(right),
-            Expression::BinaryOperation {
+            right.node,
+            ExpressionKind::BinaryOperation {
                 operator: BinaryOperator::Mul,
                 ..
             }
@@ -665,12 +650,12 @@ mod tests {
     fn comparisons_bind_tighter_than_logic() {
         let program = parse("print(1 < 2 and 2 < 3)");
 
-        let Statement::FunctionCall(call) = inner_statement(&program.body[0]) else {
+        let StatementKind::FunctionCall(call) = &program.body[0].node else {
             panic!("expected function call");
         };
         assert!(matches!(
-            inner_expression(&call.arguments[0]),
-            Expression::BinaryOperation {
+            call.arguments[0].node,
+            ExpressionKind::BinaryOperation {
                 operator: BinaryOperator::And,
                 ..
             }
@@ -680,19 +665,19 @@ mod tests {
     #[test]
     fn allows_bare_return() {
         let program = parse("function noop() { return }");
-        let Statement::FunctionDeclaration(declaration) = inner_statement(&program.body[0]) else {
+        let StatementKind::FunctionDeclaration(declaration) = &program.body[0].node else {
             panic!("expected function declaration");
         };
-        let Statement::Block(body) = inner_statement(declaration.body.as_ref()) else {
+        let StatementKind::Block(body) = &declaration.body.node else {
             panic!("expected function body");
         };
-        assert!(matches!(inner_statement(&body[0]), Statement::Return(None)));
+        assert!(matches!(body[0].node, StatementKind::Return(None)));
     }
 
     #[test]
     fn flattens_nested_index_assignment_targets() {
         let program = parse("grid[row][column] = 42");
-        let Statement::Assignment(assignment) = inner_statement(&program.body[0]) else {
+        let StatementKind::Assignment(assignment) = &program.body[0].node else {
             panic!("expected assignment");
         };
         let AssignTarget::Index { root, indices } = &assignment.target else {
