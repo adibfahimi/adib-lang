@@ -1,2 +1,8 @@
 /target
 test.adib
+
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
