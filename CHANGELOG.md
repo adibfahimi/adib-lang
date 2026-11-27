@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-27
+
+### Added
+
+- `break` and `continue`, including correct propagation through nested blocks
+  and loops.
+- Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`) and standalone `++`/`--`.
+- Index assignment for arrays and nested arrays, including const array contents.
+- A standard library: `len`, `push`, `pop`, `last`, `slice`, `join`, `split`,
+  `to_string`, `parse_number`, `abs`, `floor`, `ceil`, `round`, `sqrt`, `min`,
+  `max`, and `type_of`.
+- Structured diagnostics with source lines, carets, and function stack traces.
+- Source spans on statements and operator expressions.
+- Parser errors that name both the expected and found token.
+
+### Changed
+
+- Errors are now `Diagnostic` values rendered against the original source.
+- The playground has examples for mutation, control flow, and the standard
+  library.
+
+### Fixed
+
+- Runtime errors now point at the failing operator instead of only the enclosing
+  statement.
+- `break` and `continue` escaping a function are reported instead of unwinding
+  the caller's loop.
+
 ## [0.2.0] - 2026-11-27
 
 ### Added

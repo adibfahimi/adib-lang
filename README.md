@@ -35,9 +35,10 @@ print(twoSum(nums, 9)) // [0, 1]
 - **Recursive-descent parser** with precedence climbing, so `1 + 2 * 3` is `7`, not `9`.
 - **Lexical scoping and closures** backed by a chain of environments.
 - **Recursion** — functions can call themselves.
-- **Control flow** with `if`/`else`, `while`, and C-style `for` loops.
-- **Arrays** with indexing, `.len`, and concatenation.
-- **Runtime errors** with source positions instead of panics.
+- **Control flow** with `if`/`else`, `while`, C-style `for`, `break`, and `continue`.
+- **Mutation** with `+=`, `-=`, `*=`, `/=`, `%=`, `++`, `--`, and index assignment.
+- **Arrays** with indexing, `.len`, concatenation, and a small standard library.
+- **Diagnostics** with source snippets, carets, and function call stack traces.
 - **WebAssembly playground** with examples, keyboard shortcuts, and saved source.
 - **No unsafe code** and a dependency list you can count on one hand.
 
@@ -76,7 +77,7 @@ Run the test suite:
 cargo test
 ```
 
-The suite covers the lexer, parser, interpreter, runtime errors, every example, and a golden output fixture for the large showcase program.
+The suite has 47 tests covering the lexer, parser, interpreter, assignments, control flow, the standard library, runtime errors, every example, and a golden output fixture for the large showcase program.
 
 ## Language tour
 
@@ -110,6 +111,35 @@ Precedence, from loosest to tightest: `or`, `and`, equality (`==`, `!=`), compar
 
 `and` and `or` short-circuit and require boolean operands.
 
+### Assignment
+
+```js
+var total = 10
+total += 5   // 15
+total -= 3   // 12
+total *= 2   // 24
+total /= 4   // 6
+total %= 4   // 2
+total++      // 3
+total--      // 2
+```
+
+Array elements are assignable too, including nested arrays:
+
+```js
+var values = [1, 2, 3]
+values[0] = 10
+values[1] += 5
+values[2]++
+
+const grid = [[1, 2], [3, 4]]
+grid[1][0] = 30
+print(grid) // [[1, 2], [30, 4]]
+```
+
+A `const` binding cannot be reassigned, but the contents of a `const` array can
+still be updated through index assignment.
+
 ### Control flow
 
 ```js
@@ -130,7 +160,17 @@ for (var i = 0; i < 10; i++) {
 }
 ```
 
-`if` and `while` conditions must be booleans. The `for` loop supports `i++`, `i--`, and `i = expression` in its update clause.
+Use `break` to leave a loop and `continue` to skip to the next iteration:
+
+```js
+for (var i = 1; i <= 10; i++) {
+  if (i % 2 == 0) { continue }
+  if (i > 7) { break }
+  print(i) // 1, 3, 5, 7
+}
+```
+
+`if` and `while` conditions must be booleans. The `for` update clause accepts any assignment form: `i++`, `i--`, `i += 2`, or `i = expression`.
 
 ### Functions and closures
 
@@ -192,27 +232,46 @@ print(word[1])         // d
 
 ## Standard library
 
+Arrays are value types in Adib Lang, so `push` and `pop` return new arrays
+instead of mutating their argument.
+
 | Function | Description |
 | --- | --- |
 | `print(...values)` | Prints its arguments separated by spaces, followed by a newline. |
+| `len(value)` | Length of an array or string (Unicode characters for strings). |
+| `push(array, value)` | Returns a new array with `value` appended. |
+| `pop(array)` | Returns a new array without its last element. |
+| `last(array)` | Returns the last element of an array. |
+| `slice(array, start[, end])` | Returns a slice of an array or string. |
+| `join(array, separator)` | Joins array elements into a string. |
+| `split(string, separator)` | Splits a string into an array; an empty separator splits characters. |
+| `to_string(value)` | Converts any value to its printed representation. |
+| `parse_number(string)` | Parses a number, or returns `null` if the string is invalid. |
+| `abs(n)`, `floor(n)`, `ceil(n)`, `round(n)`, `sqrt(n)` | Numeric helpers. |
+| `min(a, b)`, `max(a, b)` | Smaller or larger of two numbers. |
+| `type_of(value)` | Returns `null`, `number`, `string`, `boolean`, `function`, or `array`. |
 
 ## Grammar
 
 ```ebnf
 program      = { statement } ;
 statement    = varDecl | functionDecl | ifStmt | whileStmt | forStmt
-             | returnStmt | block | assignment | callStmt | ";" ;
+             | returnStmt | breakStmt | continueStmt | block
+             | assignment | callStmt | ";" ;
 varDecl      = ( "var" | "const" ) IDENT [ "=" expression ] ;
 functionDecl = "function" IDENT "(" [ params ] ")" block ;
 ifStmt       = "if" "(" expression ")" statement
              [ "else" statement ] ;
 whileStmt    = "while" "(" expression ")" statement ;
 forStmt      = "for" "(" [ statement ] ";" [ expression ] ";"
-             [ update ] ")" statement ;
-update       = IDENT ( "++" | "--" | "=" expression ) ;
+             [ assignment ] ")" statement ;
 returnStmt   = "return" [ expression ] ;
+breakStmt    = "break" ;
+continueStmt = "continue" ;
 block        = "{" { statement } "}" ;
-assignment   = IDENT "=" expression ;
+assignment   = assignTarget ( "=" | "+=" | "-=" | "*=" | "/=" | "%=" ) expression
+             | assignTarget ( "++" | "--" ) ;
+assignTarget = IDENT { "[" expression "]" } ;
 callStmt     = IDENT "(" [ arguments ] ")" ;
 
 expression   = orExpr ;
@@ -248,8 +307,9 @@ source text
 ```
 
 - `src/lexer.rs` converts source into tokens. Keywords live in a perfect-hash map (`phf`), and every token records its position for diagnostics.
-- `src/parser.rs` builds an AST with a recursive-descent parser. Binary expressions use precedence climbing, and postfix access (`.len`, `[i]`, calls) is handled in one loop.
-- `src/interpreter.rs` walks the tree. Environments form a parent chain of `Rc<RefCell<Environment>>`, which gives lexical scope and lets closures keep captured variables alive. `return` is modeled as an explicit control-flow value so it propagates correctly out of loops and nested blocks.
+- `src/parser.rs` builds an AST with a recursive-descent parser. Binary expressions use precedence climbing, postfix access (`.len`, `[i]`, calls) is handled in one loop, and every statement and operator expression carries a source position.
+- `src/interpreter.rs` walks the tree. Environments form a parent chain of `Rc<RefCell<Environment>>`, which gives lexical scope and lets closures keep captured variables alive. `return`, `break`, and `continue` are explicit control-flow values so they propagate correctly through nested blocks and loops.
+- `src/error.rs` renders diagnostics with a source line, caret, and stack trace.
 - `src/lib.rs` exposes `run_source`, and on `wasm32` exports a `run(source)` function for the browser.
 - `web/` is the static playground: the editor, examples, output panel, and wasm loader.
 - `tests/` contains end-to-end language tests that parse and execute real programs.
@@ -280,10 +340,11 @@ Then open `http://localhost:4173`. The [`Deploy playground`](.github/workflows/p
 ## Roadmap
 
 - [x] Live WebAssembly playground
-- [x] Source-position diagnostics
+- [x] Source-position diagnostics and stack traces
+- [x] Index assignment and compound assignment
+- [x] `break` / `continue`
+- [x] Initial standard library
 - [ ] Objects and maps
-- [ ] Index assignment (`arr[0] = 1`) and `+=`/`-=`
-- [ ] `break` / `continue`
 - [ ] String concatenation with non-strings
 - [ ] `match` expressions (tokens are already reserved)
 - [ ] A REPL

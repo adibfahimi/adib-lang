@@ -85,8 +85,16 @@ a name rather than an arbitrary callee expression. Functions are still
 first-class values — an identifier bound to a function can be called.
 
 Statements are deliberately small: declarations, assignment, calls, `if`,
-`while`, `for`, `return`, function declarations, and blocks. Semicolons are
-accepted as empty statements, so programs can use either newlines or semicolons.
+`while`, `for`, `return`, `break`, `continue`, function declarations, and blocks.
+Semicolons are accepted as empty statements, so programs can use either newlines
+or semicolons.
+
+Assignment targets are restricted to variables and array elements. The parser
+flattens nested index targets such as `grid[row][column]` into a root name plus a
+list of index expressions, which the interpreter can evaluate once and then use
+for both reads and writes. Every statement and every operator expression is
+wrapped in a source span, so runtime failures can point at the exact operator
+rather than only the enclosing statement.
 
 ## Values
 
@@ -102,12 +110,32 @@ enum Value {
 ```
 
 Numbers are `f64`, matching the JavaScript flavor of the language. Arrays are
-owned vectors and are copied when assigned; the language has no reference
-semantics or index assignment yet. Functions are reference-counted because they
-can be captured by closures and stored in environments.
+owned vectors and are copied when assigned, so the language has value semantics
+rather than JavaScript-style references. Index assignment clones the root array,
+walks the index path, writes the new value, and stores the result back into the
+binding. This keeps the runtime simple, but it means large array updates are
+copies rather than in-place mutations.
+
+A `const` binding cannot be rebound, but its array contents can still be updated
+through index assignment. The environment therefore tracks const-ness separately
+from the stored value.
+
+Functions are reference-counted because they can be captured by closures and
+stored in environments.
 
 `Value` implements `PartialEq` manually. Numbers, strings, booleans, null, and
 arrays compare structurally; functions compare by pointer identity.
+
+## Standard library
+
+Built-ins are dispatched by name before user-defined functions, so `print`,
+`push`, or `sqrt` always resolve to the runtime implementation. They evaluate
+their arguments in the caller's environment and return ordinary `Value`s.
+
+The array helpers follow the language's value semantics: `push(array, value)`
+and `pop(array)` return new arrays rather than mutating their argument. This is
+less convenient than JavaScript's reference semantics, but it keeps the runtime
+free of shared mutable containers and the cycle problems that come with them.
 
 ## Environments and closures
 
@@ -141,21 +169,25 @@ likely use an arena or a bytecode compiler with explicit slots.
 
 ## Control flow
 
-`return` cannot be implemented as a boolean flag, because it has to escape
-nested blocks, loops, and `if` branches in the right order. The interpreter uses
-an explicit control-flow value:
+`return`, `break`, and `continue` cannot be implemented as boolean flags,
+because they have to escape nested blocks, loops, and `if` branches in the right
+order. The interpreter uses an explicit control-flow value:
 
 ```rust
 enum Flow {
     Normal,
     Return(Value),
+    Break(Option<Position>),
+    Continue(Option<Position>),
 }
 ```
 
-Every statement returns a `Flow`. Blocks stop executing once a `Return` is
-produced; loops propagate it instead of continuing; function calls consume it
-and turn it into the call's result. A top-level `return` is reported as an
-error.
+Every statement returns a `Flow`. Blocks stop executing once a non-normal flow
+is produced; loops catch `Break` and `Continue`; function calls consume
+`Return` and turn it into the call's result. `Break` and `Continue` carry their
+source position so an illegal use outside a loop can still produce a caret. A
+`break` or `continue` that escapes a function is reported as an error instead of
+unwinding the caller's loop.
 
 Conditions are strict booleans. Rather than treating every non-zero value as
 true, the interpreter reports a type error with the actual type, which makes
@@ -171,9 +203,23 @@ There are three error surfaces:
 - **Runtime errors** for undefined names, type mismatches, division by zero,
   out-of-bounds access, wrong argument counts, and const assignment.
 
-All three use `Result<_, String>` with messages that include `line:column` when
-a source position is available. The CLI prints partial output before reporting a
-runtime error, which matters when a program prints during a loop and then fails.
+All three produce a structured `Diagnostic` containing a message, an optional
+source position, and a call stack. `Diagnostic::render` turns that into:
+
+```
+error: division by zero
+  --> 2:12
+  |
+2 |   return a / b
+  |            ^
+
+stack trace:
+  at `divide` (5:7)
+```
+
+The CLI prints partial output before reporting a runtime error, which matters
+when a program prints during a loop and then fails. Parser errors name both the
+expected and found token, for example ``expected `)`, found `{` ``.
 
 ## WebAssembly
 
@@ -199,10 +245,11 @@ The test suite has three layers:
 
 1. **Unit tests** next to the lexer, parser, and interpreter.
 2. **Language tests** in `tests/language.rs` that compile and execute real
-   programs, including error cases and every example.
-3. **A golden-output test** for `examples/showcase.adib`, a 300-line program
-   that exercises recursion, closures, arrays, matrices, sorting, searching, and
-   strings.
+   programs, including assignment forms, `break`/`continue`, standard-library
+   functions, diagnostics, error cases, and every example.
+3. **A golden-output test** for `examples/showcase.adib`, a 300+ line program
+   that exercises recursion, closures, arrays, matrices, sorting, searching,
+   strings, mutation, and control flow.
 
 CI runs `cargo fmt --check`, `cargo clippy -- -D warnings`, and `cargo test`.
 The playground build is verified separately by the Pages workflow.
@@ -214,7 +261,10 @@ The current design optimizes for readability:
 - **Tree walking is simple, not fast.** A bytecode compiler and VM would be the
   next performance step.
 - **Values are cloned on lookup.** Small arrays and strings make this fine; a
-  larger runtime would use references or an arena.
+  larger runtime would use references or an arena. Index assignment also copies
+  the root array before writing it back.
+- **Assignment targets are rooted at variables.** `arr[i] = x` works, but
+  `make_array()[i] = x` does not, because the language has no reference values.
 - **Function calls are named.** Supporting arbitrary callee expressions would
   require changing `FunctionCall` to hold an `Expression`.
 - **No objects or maps yet.** They are the largest missing language feature.

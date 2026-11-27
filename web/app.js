@@ -94,6 +94,34 @@ for (var i = 0; i <= 10; i++) {
   print("fib of", i, "=", fib(i))
 }`,
   },
+  mutation: {
+    label: "Mutation & control flow",
+    code: `var odd_values = []
+for (var i = 1; i <= 10; i++) {
+  if (i % 2 == 0) { continue }
+  if (i > 7) { break }
+  odd_values = push(odd_values, i)
+}
+print("odd values =", odd_values)
+
+var scores = [72, 90, 65]
+scores[0] += 8
+scores[2] -= 5
+print("adjusted =", scores)`,
+  },
+  stdlib: {
+    label: "Standard library",
+    code: `const words = split("rust,wasm,interpreter", ",")
+print("words =", words)
+print("count =", len(words))
+print("joined =", join(words, " + "))
+print("first two =", slice(words, 0, 2))
+print("last =", last(words))
+print("pushed =", push(words, "playground"))
+print("parsed =", parse_number("3.14"))
+print("sqrt(81) =", sqrt(81))
+print("type =", type_of(words))`,
+  },
   matrix: {
     label: "Matrix multiplication",
     code: `function multiply(left, right) {
