@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/adibfahimi/adib-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/adibfahimi/adib-lang/actions/workflows/ci.yml)
 [![Playground](https://img.shields.io/badge/playground-live-f4b942?logo=webassembly&logoColor=black)](https://adibfahimi.github.io/adib-lang/)
+[![Release](https://img.shields.io/github/v/release/adibfahimi/adib-lang?color=f4b942)](https://github.com/adibfahimi/adib-lang/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A small, tree-walking interpreter for a JavaScript-flavored language, written in Rust.
