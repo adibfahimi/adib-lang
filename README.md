@@ -1,11 +1,16 @@
 # Adib Lang
 
 [![CI](https://github.com/adibfahimi/adib-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/adibfahimi/adib-lang/actions/workflows/ci.yml)
+[![Playground](https://img.shields.io/badge/playground-live-f4b942?logo=webassembly&logoColor=black)](https://adibfahimi.github.io/adib-lang/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 A small, tree-walking interpreter for a JavaScript-flavored language, written in Rust.
 
-Adib Lang is a learning project that grew into a complete little language: lexer, parser, AST, and interpreter are all hand-written, with no parser generators or interpreter crates. It supports variables, control flow, first-class functions, closures, recursion, arrays, and a small standard library. It also compiles to WebAssembly through `wasm-bindgen`.
+Adib Lang is a learning project that grew into a complete little language: lexer, parser, AST, and interpreter are all hand-written, with no parser generators or interpreter crates. It supports variables, control flow, first-class functions, closures, recursion, arrays, and a small standard library. The same Rust core compiles to WebAssembly and powers a live in-browser playground.
+
+[![Adib Lang playground](assets/playground.png)](https://adibfahimi.github.io/adib-lang/)
+
+**[Try the live playground →](https://adibfahimi.github.io/adib-lang/)** — edit a program, press Run, and the real interpreter executes in your browser. No install required.
 
 ```js
 function twoSum(nums, target) {
@@ -32,9 +37,17 @@ print(twoSum(nums, 9)) // [0, 1]
 - **Control flow** with `if`/`else`, `while`, and C-style `for` loops.
 - **Arrays** with indexing, `.len`, and concatenation.
 - **Runtime errors** with source positions instead of panics.
+- **WebAssembly playground** with examples, keyboard shortcuts, and saved source.
 - **No unsafe code** and a dependency list you can count on one hand.
 
-## Quick start
+## Install
+
+```bash
+cargo install --git https://github.com/adibfahimi/adib-lang.git
+adib-lang examples/hello_world.adib
+```
+
+Or work from a clone:
 
 ```bash
 git clone https://github.com/adibfahimi/adib-lang.git
@@ -61,6 +74,8 @@ Run the test suite:
 ```bash
 cargo test
 ```
+
+The suite covers the lexer, parser, interpreter, runtime errors, every example, and a golden output fixture for the large showcase program.
 
 ## Language tour
 
@@ -220,6 +235,8 @@ Semicolons are optional; they act as empty statements.
 
 ## How it works
 
+For a deeper explanation of the lexer, parser, environment model, control flow, and trade-offs, see [`docs/DESIGN.md`](docs/DESIGN.md).
+
 ```
 source text
     │
@@ -233,21 +250,36 @@ source text
 - `src/parser.rs` builds an AST with a recursive-descent parser. Binary expressions use precedence climbing, and postfix access (`.len`, `[i]`, calls) is handled in one loop.
 - `src/interpreter.rs` walks the tree. Environments form a parent chain of `Rc<RefCell<Environment>>`, which gives lexical scope and lets closures keep captured variables alive. `return` is modeled as an explicit control-flow value so it propagates correctly out of loops and nested blocks.
 - `src/lib.rs` exposes `run_source`, and on `wasm32` exports a `run(source)` function for the browser.
+- `web/` is the static playground: the editor, examples, output panel, and wasm loader.
 - `tests/` contains end-to-end language tests that parse and execute real programs.
 
-## WebAssembly
+## WebAssembly playground
 
-The crate is set up as a `cdylib` with a `wasm32` export:
+The crate is a `cdylib` with a `wasm32` export:
+
+```rust
+#[wasm_bindgen]
+pub fn run(source: &str) -> String
+```
+
+It returns the program's output, or an error string prefixed with `error:`. The playground imports that function directly, so the browser runs the same interpreter as the CLI.
+
+Build and serve it locally:
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo build --target wasm32-unknown-unknown --release
+cargo install wasm-pack
+
+wasm-pack build --target web --out-dir web/pkg --release
+python3 -m http.server 4173 --directory web
 ```
 
-The exported `run(source: &str) -> String` returns the program's output, or an error string prefixed with `error:`. It can be wrapped with `wasm-bindgen` for use in a browser playground.
+Then open `http://localhost:4173`. The [`Deploy playground`](.github/workflows/pages.yml) workflow rebuilds and deploys it to GitHub Pages whenever the interpreter or web assets change.
 
 ## Roadmap
 
+- [x] Live WebAssembly playground
+- [x] Source-position diagnostics
 - [ ] Objects and maps
 - [ ] Index assignment (`arr[0] = 1`) and `+=`/`-=`
 - [ ] `break` / `continue`
