@@ -307,8 +307,11 @@ source text
 ```
 
 - `src/lexer.rs` converts source into tokens. Keywords live in a perfect-hash map (`phf`), and every token records its position for diagnostics.
-- `src/parser.rs` builds an AST with a recursive-descent parser. Binary expressions use precedence climbing, postfix access (`.len`, `[i]`, calls) is handled in one loop, and every statement and operator expression carries a source position.
-- `src/interpreter.rs` walks the tree. Environments form a parent chain of `Rc<RefCell<Environment>>`, which gives lexical scope and lets closures keep captured variables alive. `return`, `break`, and `continue` are explicit control-flow values so they propagate correctly through nested blocks and loops.
+- `src/ast.rs` defines the AST and source-spanned nodes.
+- `src/parser.rs` builds the AST with a recursive-descent parser. Binary expressions use precedence climbing, postfix access (`.len`, `[i]`, calls) is handled in one loop, and every statement and operator expression carries a source position.
+- `src/interpreter.rs` walks the tree. `return`, `break`, and `continue` are explicit control-flow values so they propagate correctly through nested blocks and loops.
+- `src/environment.rs` and `src/value.rs` hold the scope chain (`Rc<RefCell<Environment>>`) and runtime values, giving lexical scope and closures.
+- `src/builtins.rs` implements the standard library separately from execution.
 - `src/error.rs` renders diagnostics with a source line, caret, and stack trace.
 - `src/lib.rs` exposes `run_source`, and on `wasm32` exports a `run(source)` function for the browser.
 - `web/` is the static playground: the editor, examples, output panel, and wasm loader.

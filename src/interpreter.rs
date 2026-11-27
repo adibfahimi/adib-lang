@@ -1,151 +1,9 @@
+use crate::ast::*;
+use crate::builtins::{self, Builtin, BuiltinOutcome};
+use crate::environment::{AssignResult, EnvRef, Environment};
 use crate::error::{Diagnostic, Position, StackFrame};
-use crate::parser::*;
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::fmt;
+use crate::value::{as_index, FunctionValue, Value};
 use std::rc::Rc;
-
-type EnvRef = Rc<RefCell<Environment>>;
-
-struct Environment {
-    values: HashMap<String, Value>,
-    constants: HashSet<String>,
-    parent: Option<EnvRef>,
-}
-
-impl Environment {
-    fn new() -> EnvRef {
-        Rc::new(RefCell::new(Self {
-            values: HashMap::new(),
-            constants: HashSet::new(),
-            parent: None,
-        }))
-    }
-
-    fn with_parent(parent: &EnvRef) -> EnvRef {
-        Rc::new(RefCell::new(Self {
-            values: HashMap::new(),
-            constants: HashSet::new(),
-            parent: Some(Rc::clone(parent)),
-        }))
-    }
-
-    fn define(&mut self, name: String, value: Value, is_const: bool) {
-        if is_const {
-            self.constants.insert(name.clone());
-        } else {
-            self.constants.remove(&name);
-        }
-        self.values.insert(name, value);
-    }
-
-    fn get(&self, name: &str) -> Option<Value> {
-        if let Some(value) = self.values.get(name) {
-            return Some(value.clone());
-        }
-        self.parent
-            .as_ref()
-            .and_then(|parent| parent.borrow().get(name))
-    }
-
-    fn assign(&mut self, name: &str, value: Value) -> AssignResult {
-        if self.constants.contains(name) {
-            return AssignResult::Constant;
-        }
-        if let Some(slot) = self.values.get_mut(name) {
-            *slot = value;
-            return AssignResult::Ok;
-        }
-        match &self.parent {
-            Some(parent) => parent.borrow_mut().assign(name, value),
-            None => AssignResult::NotFound,
-        }
-    }
-
-    /// Update the value of an existing binding without changing const-ness.
-    ///
-    /// This is used for index assignment: a `const` array cannot be rebound, but
-    /// its elements are still mutable.
-    fn set_existing(&mut self, name: &str, value: Value) -> bool {
-        if let Some(slot) = self.values.get_mut(name) {
-            *slot = value;
-            return true;
-        }
-        match &self.parent {
-            Some(parent) => parent.borrow_mut().set_existing(name, value),
-            None => false,
-        }
-    }
-}
-
-enum AssignResult {
-    Ok,
-    Constant,
-    NotFound,
-}
-
-#[derive(Clone)]
-pub struct FunctionValue {
-    declaration: Rc<FunctionDeclaration>,
-    closure: EnvRef,
-}
-
-impl fmt::Debug for FunctionValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Function({})", self.declaration.name)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Value {
-    Null,
-    Number(f64),
-    String(String),
-    Boolean(bool),
-    Function(Rc<FunctionValue>),
-    Array(Vec<Value>),
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Null, Value::Null) => true,
-            (Value::Number(a), Value::Number(b)) => a == b,
-            (Value::String(a), Value::String(b)) => a == b,
-            (Value::Boolean(a), Value::Boolean(b)) => a == b,
-            (Value::Array(a), Value::Array(b)) => a == b,
-            (Value::Function(a), Value::Function(b)) => Rc::ptr_eq(a, b),
-            _ => false,
-        }
-    }
-}
-
-impl Value {
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            Value::Null => "null",
-            Value::Number(_) => "number",
-            Value::String(_) => "string",
-            Value::Boolean(_) => "boolean",
-            Value::Function(_) => "function",
-            Value::Array(_) => "array",
-        }
-    }
-}
-
-pub fn value_to_string(value: &Value) -> String {
-    match value {
-        Value::Null => "null".to_string(),
-        Value::Number(n) => n.to_string(),
-        Value::String(s) => s.clone(),
-        Value::Boolean(b) => b.to_string(),
-        Value::Function(_) => "function".to_string(),
-        Value::Array(arr) => {
-            let elements: Vec<String> = arr.iter().map(value_to_string).collect();
-            format!("[{}]", elements.join(", "))
-        }
-    }
-}
 
 enum Flow {
     Normal,
@@ -179,7 +37,7 @@ impl Interpreter {
 
     pub fn eval(&mut self, program: &Program) -> Result<(), Diagnostic> {
         for statement in &program.body {
-            let position = statement_position(statement);
+            let position = statement.position();
             match self.exec_statement(statement)? {
                 Flow::Normal => {}
                 Flow::Return(_) => {
@@ -304,9 +162,9 @@ impl Interpreter {
             AssignTarget::Index { root, indices } => {
                 let mut positions = Vec::with_capacity(indices.len());
                 for index in indices {
-                    let position = expression_position(index).or(self.current_position);
+                    let position = index.position().or(self.current_position);
                     let value = self.eval_expression(index)?;
-                    positions.push(self.as_index(&value, position)?);
+                    positions.push(as_index(&value, position)?);
                 }
 
                 let current = if assignment.operator == AssignmentOperator::Assign {
@@ -327,15 +185,12 @@ impl Interpreter {
         current: Option<Value>,
         right: Value,
     ) -> Result<Value, Diagnostic> {
-        let binary_operator = match operator {
-            AssignmentOperator::Assign => return Ok(right),
-            AssignmentOperator::Add => BinaryOperator::Add,
-            AssignmentOperator::Sub => BinaryOperator::Sub,
-            AssignmentOperator::Mul => BinaryOperator::Mul,
-            AssignmentOperator::Div => BinaryOperator::Div,
-            AssignmentOperator::Mod => BinaryOperator::Mod,
-        };
-        self.eval_binary_op(&binary_operator, current.unwrap_or(Value::Null), right)
+        match operator.binary_operator() {
+            None => Ok(right),
+            Some(binary_operator) => {
+                self.eval_binary_op(&binary_operator, current.unwrap_or(Value::Null), right)
+            }
+        }
     }
 
     fn read_index_path(&mut self, root: &str, positions: &[usize]) -> Result<Value, Diagnostic> {
@@ -391,27 +246,6 @@ impl Interpreter {
             }
             other => Err(self.error(format!("cannot index into {}", other.type_name()))),
         }
-    }
-
-    fn as_index(&self, value: &Value, position: Option<Position>) -> Result<usize, Diagnostic> {
-        let Value::Number(position_value) = value else {
-            return Err(Diagnostic::maybe_at(
-                format!("index must be a number, got {}", value.type_name()),
-                position.or(self.current_position),
-            ));
-        };
-
-        if *position_value < 0.0 || position_value.fract() != 0.0 {
-            return Err(Diagnostic::maybe_at(
-                format!(
-                    "index must be a non-negative integer, got {}",
-                    position_value
-                ),
-                position.or(self.current_position),
-            ));
-        }
-
-        Ok(*position_value as usize)
     }
 
     fn lookup_variable(&self, name: &str) -> Result<Value, Diagnostic> {
@@ -488,9 +322,25 @@ impl Interpreter {
         Ok(Flow::Normal)
     }
 
+    fn eval_arguments(&mut self, call: &FunctionCall) -> Result<Vec<Value>, Diagnostic> {
+        let mut arguments = Vec::with_capacity(call.arguments.len());
+        for argument in &call.arguments {
+            arguments.push(self.eval_expression(argument)?);
+        }
+        Ok(arguments)
+    }
+
     fn eval_function_call(&mut self, func_call: &FunctionCall) -> Result<Value, Diagnostic> {
-        if let Some(result) = self.eval_builtin(func_call) {
-            return result.map_err(|error| error.with_stack(self.call_stack.clone()));
+        if let Some(builtin) = Builtin::from_name(&func_call.name) {
+            let arguments = self.eval_arguments(func_call)?;
+            return match builtins::call(builtin, &arguments, func_call.position()) {
+                Ok(BuiltinOutcome::Value(value)) => Ok(value),
+                Ok(BuiltinOutcome::Print(output)) => {
+                    self.output.push_str(&output);
+                    Ok(Value::Null)
+                }
+                Err(error) => Err(error.with_stack(self.call_stack.clone())),
+            };
         }
 
         let callee = self.env.borrow().get(&func_call.name).ok_or_else(|| {
@@ -509,11 +359,7 @@ impl Interpreter {
             .with_stack(self.call_stack.clone()));
         };
 
-        let mut arguments = Vec::with_capacity(func_call.arguments.len());
-        for argument in &func_call.arguments {
-            arguments.push(self.eval_expression(argument)?);
-        }
-
+        let arguments = self.eval_arguments(func_call)?;
         self.call_function(&function, arguments, func_call.position())
     }
 
@@ -658,7 +504,7 @@ impl Interpreter {
     }
 
     fn eval_array_indexing(&self, array: Value, index: Value) -> Result<Value, Diagnostic> {
-        let position = self.as_index(&index, self.current_position)?;
+        let position = as_index(&index, self.current_position)?;
         match array {
             Value::Array(array) => array.get(position).cloned().ok_or_else(|| {
                 self.error(format!(
@@ -734,7 +580,7 @@ impl Interpreter {
             _ => Err(self.error(format!(
                 "invalid binary operation: {} {} {}",
                 left.type_name(),
-                binary_symbol(operator),
+                operator.symbol(),
                 right.type_name()
             ))),
         }
@@ -746,7 +592,7 @@ impl Interpreter {
             (UnaryOperator::Not, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
             _ => Err(self.error(format!(
                 "invalid unary operation: {} {}",
-                unary_symbol(operator),
+                operator.symbol(),
                 operand.type_name()
             ))),
         }
@@ -765,355 +611,6 @@ impl Interpreter {
 
     fn error(&self, message: impl Into<String>) -> Diagnostic {
         Diagnostic::maybe_at(message, self.current_position)
-    }
-
-    // ---------- Built-in functions ----------
-
-    fn eval_builtin(&mut self, call: &FunctionCall) -> Option<Result<Value, Diagnostic>> {
-        let result = match call.name.as_str() {
-            "print" => self.builtin_print(call),
-            "len" => self.builtin_len(call),
-            "push" => self.builtin_push(call),
-            "pop" => self.builtin_pop(call),
-            "last" => self.builtin_last(call),
-            "slice" => self.builtin_slice(call),
-            "join" => self.builtin_join(call),
-            "split" => self.builtin_split(call),
-            "to_string" => self.builtin_to_string(call),
-            "parse_number" => self.builtin_parse_number(call),
-            "type_of" => self.builtin_type_of(call),
-            "abs" | "floor" | "ceil" | "round" | "sqrt" => self.builtin_math(call),
-            "min" => self.builtin_min_max(call, true),
-            "max" => self.builtin_min_max(call, false),
-            _ => return None,
-        };
-        Some(result)
-    }
-
-    fn eval_arguments(&mut self, call: &FunctionCall) -> Result<Vec<Value>, Diagnostic> {
-        let mut arguments = Vec::with_capacity(call.arguments.len());
-        for argument in &call.arguments {
-            arguments.push(self.eval_expression(argument)?);
-        }
-        Ok(arguments)
-    }
-
-    fn require_arity(
-        &self,
-        call: &FunctionCall,
-        arguments: &[Value],
-        expected: usize,
-    ) -> Result<(), Diagnostic> {
-        if arguments.len() == expected {
-            Ok(())
-        } else {
-            Err(Diagnostic::at(
-                format!(
-                    "`{}` expects {} argument(s), got {}",
-                    call.name,
-                    expected,
-                    arguments.len()
-                ),
-                call.position(),
-            ))
-        }
-    }
-
-    fn require_arity_range(
-        &self,
-        call: &FunctionCall,
-        arguments: &[Value],
-        min: usize,
-        max: usize,
-    ) -> Result<(), Diagnostic> {
-        if (min..=max).contains(&arguments.len()) {
-            Ok(())
-        } else {
-            Err(Diagnostic::at(
-                format!(
-                    "`{}` expects between {} and {} arguments, got {}",
-                    call.name,
-                    min,
-                    max,
-                    arguments.len()
-                ),
-                call.position(),
-            ))
-        }
-    }
-
-    fn type_error(
-        &self,
-        call: &FunctionCall,
-        argument: usize,
-        expected: &str,
-        value: &Value,
-    ) -> Diagnostic {
-        Diagnostic::at(
-            format!(
-                "`{}` expects {} as argument {}, got {}",
-                call.name,
-                expected,
-                argument + 1,
-                value.type_name()
-            ),
-            call.position(),
-        )
-    }
-
-    fn builtin_index(
-        &self,
-        call: &FunctionCall,
-        value: &Value,
-        argument: usize,
-    ) -> Result<usize, Diagnostic> {
-        let Value::Number(position) = value else {
-            return Err(self.type_error(call, argument, "an index", value));
-        };
-        if *position < 0.0 || position.fract() != 0.0 {
-            return Err(Diagnostic::at(
-                format!("index must be a non-negative integer, got {}", position),
-                call.position(),
-            ));
-        }
-        Ok(*position as usize)
-    }
-
-    fn builtin_print(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        let parts: Vec<String> = arguments.iter().map(value_to_string).collect();
-        self.output.push_str(&parts.join(" "));
-        self.output.push('\n');
-        Ok(Value::Null)
-    }
-
-    fn builtin_len(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 1)?;
-        match &arguments[0] {
-            Value::Array(array) => Ok(Value::Number(array.len() as f64)),
-            Value::String(string) => Ok(Value::Number(string.chars().count() as f64)),
-            other => Err(self.type_error(call, 0, "an array or string", other)),
-        }
-    }
-
-    /// Arrays are value types, so `push` returns a new array.
-    fn builtin_push(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 2)?;
-        let Value::Array(mut array) = arguments[0].clone() else {
-            return Err(self.type_error(call, 0, "an array", &arguments[0]));
-        };
-        array.push(arguments[1].clone());
-        Ok(Value::Array(array))
-    }
-
-    /// Arrays are value types, so `pop` returns a new array without its last element.
-    fn builtin_pop(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 1)?;
-        let Value::Array(mut array) = arguments[0].clone() else {
-            return Err(self.type_error(call, 0, "an array", &arguments[0]));
-        };
-        if array.pop().is_none() {
-            return Err(Diagnostic::at(
-                "`pop` cannot remove from an empty array",
-                call.position(),
-            ));
-        }
-        Ok(Value::Array(array))
-    }
-
-    fn builtin_last(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 1)?;
-        let Value::Array(array) = &arguments[0] else {
-            return Err(self.type_error(call, 0, "an array", &arguments[0]));
-        };
-        array
-            .last()
-            .cloned()
-            .ok_or_else(|| Diagnostic::at("`last` cannot read an empty array", call.position()))
-    }
-
-    fn builtin_slice(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity_range(call, &arguments, 2, 3)?;
-
-        let length = match &arguments[0] {
-            Value::Array(array) => array.len(),
-            Value::String(string) => string.chars().count(),
-            other => return Err(self.type_error(call, 0, "an array or string", other)),
-        };
-
-        let start = self.builtin_index(call, &arguments[1], 1)?.min(length);
-        let end = if arguments.len() == 3 {
-            self.builtin_index(call, &arguments[2], 2)?.min(length)
-        } else {
-            length
-        };
-
-        if end <= start {
-            return match &arguments[0] {
-                Value::Array(_) => Ok(Value::Array(Vec::new())),
-                Value::String(_) => Ok(Value::String(String::new())),
-                _ => unreachable!(),
-            };
-        }
-
-        match &arguments[0] {
-            Value::Array(array) => Ok(Value::Array(array[start..end].to_vec())),
-            Value::String(string) => Ok(Value::String(
-                string.chars().skip(start).take(end - start).collect(),
-            )),
-            _ => unreachable!(),
-        }
-    }
-
-    fn builtin_join(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 2)?;
-        let Value::Array(array) = &arguments[0] else {
-            return Err(self.type_error(call, 0, "an array", &arguments[0]));
-        };
-        let Value::String(separator) = &arguments[1] else {
-            return Err(self.type_error(call, 1, "a string", &arguments[1]));
-        };
-        let parts: Vec<String> = array.iter().map(value_to_string).collect();
-        Ok(Value::String(parts.join(separator)))
-    }
-
-    fn builtin_split(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 2)?;
-        let Value::String(text) = &arguments[0] else {
-            return Err(self.type_error(call, 0, "a string", &arguments[0]));
-        };
-        let Value::String(separator) = &arguments[1] else {
-            return Err(self.type_error(call, 1, "a string", &arguments[1]));
-        };
-
-        if separator.is_empty() {
-            return Ok(Value::Array(
-                text.chars()
-                    .map(|character| Value::String(character.to_string()))
-                    .collect(),
-            ));
-        }
-
-        Ok(Value::Array(
-            text.split(separator.as_str())
-                .map(|part| Value::String(part.to_string()))
-                .collect(),
-        ))
-    }
-
-    fn builtin_to_string(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 1)?;
-        Ok(Value::String(value_to_string(&arguments[0])))
-    }
-
-    fn builtin_parse_number(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 1)?;
-        let Value::String(text) = &arguments[0] else {
-            return Err(self.type_error(call, 0, "a string", &arguments[0]));
-        };
-        Ok(text
-            .trim()
-            .parse::<f64>()
-            .map(Value::Number)
-            .unwrap_or(Value::Null))
-    }
-
-    fn builtin_type_of(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 1)?;
-        Ok(Value::String(arguments[0].type_name().to_string()))
-    }
-
-    fn builtin_math(&mut self, call: &FunctionCall) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 1)?;
-        let Value::Number(number) = arguments[0] else {
-            return Err(self.type_error(call, 0, "a number", &arguments[0]));
-        };
-
-        let result = match call.name.as_str() {
-            "abs" => number.abs(),
-            "floor" => number.floor(),
-            "ceil" => number.ceil(),
-            "round" => number.round(),
-            "sqrt" => {
-                if number < 0.0 {
-                    return Err(Diagnostic::at(
-                        "cannot take the square root of a negative number",
-                        call.position(),
-                    ));
-                }
-                number.sqrt()
-            }
-            _ => unreachable!(),
-        };
-
-        Ok(Value::Number(result))
-    }
-
-    fn builtin_min_max(&mut self, call: &FunctionCall, minimum: bool) -> Result<Value, Diagnostic> {
-        let arguments = self.eval_arguments(call)?;
-        self.require_arity(call, &arguments, 2)?;
-        let Value::Number(left) = arguments[0] else {
-            return Err(self.type_error(call, 0, "a number", &arguments[0]));
-        };
-        let Value::Number(right) = arguments[1] else {
-            return Err(self.type_error(call, 1, "a number", &arguments[1]));
-        };
-        Ok(Value::Number(if minimum {
-            left.min(right)
-        } else {
-            left.max(right)
-        }))
-    }
-}
-
-fn statement_position(statement: &Statement) -> Option<Position> {
-    match statement {
-        Statement::Spanned(_, position) => Some(*position),
-        _ => None,
-    }
-}
-
-fn expression_position(expression: &Expression) -> Option<Position> {
-    match expression {
-        Expression::Spanned(_, position) => Some(*position),
-        Expression::FunctionCall(call) => Some(call.position()),
-        _ => None,
-    }
-}
-
-fn binary_symbol(operator: &BinaryOperator) -> &'static str {
-    match operator {
-        BinaryOperator::Add => "+",
-        BinaryOperator::Sub => "-",
-        BinaryOperator::Mul => "*",
-        BinaryOperator::Div => "/",
-        BinaryOperator::Mod => "%",
-        BinaryOperator::Eq => "==",
-        BinaryOperator::NotEq => "!=",
-        BinaryOperator::Lt => "<",
-        BinaryOperator::LtEq => "<=",
-        BinaryOperator::Gt => ">",
-        BinaryOperator::GtEq => ">=",
-        BinaryOperator::And => "and",
-        BinaryOperator::Or => "or",
-    }
-}
-
-fn unary_symbol(operator: &UnaryOperator) -> &'static str {
-    match operator {
-        UnaryOperator::Minus => "-",
-        UnaryOperator::Not => "!",
     }
 }
 

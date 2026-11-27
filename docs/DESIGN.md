@@ -38,8 +38,13 @@ Each stage is a separate module:
 | File | Responsibility |
 | --- | --- |
 | `src/lexer.rs` | Source text to tokens, comments, strings, numbers, positions |
+| `src/ast.rs` | AST node definitions and source-spanned nodes |
 | `src/parser.rs` | Tokens to AST, precedence climbing, statement grammar |
-| `src/interpreter.rs` | Tree walking, environments, values, runtime errors |
+| `src/interpreter.rs` | Tree walking, control flow, runtime errors |
+| `src/value.rs` | Runtime values, function values, value formatting, index validation |
+| `src/environment.rs` | Scope chain, bindings, constants, closure environments |
+| `src/builtins.rs` | Standard-library dispatch and implementations |
+| `src/error.rs` | Structured diagnostics and source rendering |
 | `src/lib.rs` | Embedding API (`run_source`) and the `wasm-bindgen` export |
 | `src/main.rs` | CLI wrapper around the library |
 | `web/` | Static playground that loads the wasm build |
