@@ -167,6 +167,200 @@ fn bare_return_returns_null() {
 }
 
 #[test]
+fn supports_break_and_continue() {
+    assert_eq!(
+        run("
+            var values = []
+            for (var i = 0; i < 10; i++) {
+                if (i == 2) { continue }
+                if (i == 6) { break }
+                values = push(values, i)
+            }
+            print(values)
+
+            var n = 0
+            var sum = 0
+            while (n < 10) {
+                n += 1
+                if (n % 2 == 0) { continue }
+                if (n > 7) { break }
+                sum += n
+            }
+            print(sum)
+
+            var pairs = []
+            for (var row = 0; row < 3; row++) {
+                for (var column = 0; column < 3; column++) {
+                    if (column == 1) { continue }
+                    if (column == 2) { break }
+                    pairs = push(pairs, row * 10 + column)
+                }
+            }
+            print(pairs)
+        "),
+        "[0, 1, 3, 4, 5]\n16\n[0, 10, 20]\n"
+    );
+}
+
+#[test]
+fn supports_compound_and_update_assignment() {
+    assert_eq!(
+        run("
+            var x = 10
+            x += 5
+            x -= 3
+            x *= 2
+            x /= 4
+            x %= 4
+            x++
+            x--
+            print(x)
+
+            var text = \"a\"
+            text += \"b\"
+            print(text)
+
+            var values = [1]
+            values += [2]
+            print(values)
+
+            for (var i = 0; i < 5; i += 2) {
+                print(i)
+            }
+        "),
+        "2\nab\n[1, 2]\n0\n2\n4\n"
+    );
+}
+
+#[test]
+fn supports_index_assignment() {
+    assert_eq!(
+        run("
+            var values = [1, 2, 3]
+            values[0] = 10
+            values[1] += 5
+            values[2]++
+            print(values)
+
+            const grid = [[1, 2], [3, 4]]
+            grid[1][0] = 30
+            grid[0][1] -= 1
+            print(grid)
+
+            const fixed = [1, 2]
+            fixed[0] = 9
+            print(fixed)
+
+            var calls = 0
+            function next_index() {
+                calls += 1
+                return 0
+            }
+            var single = [10]
+            single[next_index()] += 5
+            print(calls, single)
+        "),
+        "[10, 7, 4]\n[[1, 1], [30, 4]]\n[9, 2]\n1 [15]\n"
+    );
+}
+
+#[test]
+fn standard_library_works() {
+    assert_eq!(
+        run("
+            const values = [1, 2, 3]
+            print(push(values, 4))
+            print(values)
+            print(pop(values))
+            print(last(values))
+            print(slice(values, 1))
+            print(slice(values, 0, 2))
+            print(slice(\"adib\", 1, 3))
+            print(join(values, \"-\"))
+            print(split(\"a,b,c\", \",\"))
+            print(split(\"abc\", \"\"))
+            print(to_string([1, 2]))
+            print(parse_number(\" 3.5 \"))
+            print(parse_number(\"nope\"))
+            print(abs(-7), floor(3.9), ceil(3.1), round(2.5), sqrt(81))
+            print(min(3, 5), max(3, 5))
+            print(len(\"héllo\"))
+            print(type_of(values))
+        "),
+        "[1, 2, 3, 4]\n[1, 2, 3]\n[1, 2]\n3\n[2, 3]\n[1, 2]\ndi\n1-2-3\n[a, b, c]\n[a, b, c]\n[1, 2]\n3.5\nnull\n7 3 4 3 9\n3 5\n5\narray\n"
+    );
+}
+
+#[test]
+fn standard_library_reports_errors() {
+    fails_with("push(1, 2)", "expects an array");
+    fails_with("pop([])", "empty array");
+    fails_with("last([])", "empty array");
+    fails_with("slice(1, 0)", "array or string");
+    fails_with("join([1], 2)", "expects a string");
+    fails_with("parse_number(1)", "expects a string");
+    fails_with("sqrt(-1)", "negative");
+    fails_with("abs()", "expects 1 argument");
+}
+
+#[test]
+fn break_and_continue_only_work_inside_loops() {
+    fails_with("break", "`break` outside of a loop");
+    fails_with("continue", "`continue` outside of a loop");
+    fails_with(
+        "function stop() { break }\nfor (var i = 0; i < 2; i++) { stop() }",
+        "`break` outside of a loop",
+    );
+    fails_with(
+        "function skip() { continue }\nfor (var i = 0; i < 2; i++) { skip() }",
+        "`continue` outside of a loop",
+    );
+}
+
+#[test]
+fn assignment_errors_are_reported() {
+    fails_with("var values = [1]\nvalues[2] = 3", "index out of bounds");
+    fails_with(
+        "var text = \"a\"\ntext[0] = \"b\"",
+        "cannot index into string",
+    );
+    fails_with("var value = 1\nvalue.field = 2", "can only assign");
+    fails_with("const answer = 42\nanswer += 1", "constant");
+}
+
+#[test]
+fn diagnostics_include_source_context_and_stack_trace() {
+    let error = run_source("function divide(a, b) {\n  return a / b\n}\nprint(divide(1, 0))")
+        .expect_err("program should fail");
+
+    assert!(error.contains("division by zero"), "{}", error);
+    assert!(error.contains("return a / b"), "{}", error);
+    assert!(error.contains("--> 2:12"), "{}", error);
+    assert!(error.contains("^"), "{}", error);
+    assert!(error.contains("stack trace:"), "{}", error);
+    assert!(error.contains("at `divide`"), "{}", error);
+}
+
+#[test]
+fn stack_traces_include_nested_calls_innermost_first() {
+    let error =
+        run_source("function outer() { middle() }\nfunction middle() { return 1 / 0 }\nouter()")
+            .expect_err("program should fail");
+
+    let middle = error.find("at `middle`").expect("middle frame");
+    let outer = error.find("at `outer`").expect("outer frame");
+    assert!(middle < outer, "{}", error);
+}
+
+#[test]
+fn syntax_errors_name_the_expected_and_found_tokens() {
+    let error = run_source("if (true { print(1) }").expect_err("program should fail");
+    assert!(error.contains("expected `)`, found `{`"), "{}", error);
+    assert!(error.contains("1 | if (true { print(1) }"), "{}", error);
+    assert!(error.contains("^"), "{}", error);
+}
+
+#[test]
 fn runtime_errors_are_reported() {
     fails_with("print(missing)", "undefined variable");
     fails_with("missing()", "undefined function");

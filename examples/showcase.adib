@@ -325,4 +325,24 @@ for (var i = 0; i < item_names.len; i++) {
 print("total inventory value =", inventory_value(item_prices, item_quantities))
 
 print("")
+print("-- Mutation and control flow --")
+var odd_numbers = []
+for (var i = 1; i <= 20; i++) {
+  if (i % 2 == 0) { continue }
+  if (i > 15) { break }
+  odd_numbers = push(odd_numbers, i)
+}
+print("odd numbers <= 15 =", odd_numbers)
+
+var mutated = [3, 1, 4, 1, 5]
+mutated[0] += 10
+mutated[4]++
+print("mutated values =", mutated)
+
+const words = split("rust,wasm,interpreter", ",")
+print("split words =", words)
+print("joined words =", join(words, " + "))
+print("first four chars =", slice("adib lang", 0, 4))
+
+print("")
 print("=== showcase complete ===")
