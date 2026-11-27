@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adib Lang — WebAssembly Playground</title>
+    <meta
+      name="description"
+      content="Write and run Adib Lang, a JavaScript-flavored language written in Rust, entirely in your browser."
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Adib Lang — WebAssembly Playground" />
+    <meta
+      property="og:description"
+      content="A tiny language written from scratch in Rust. Edit a program and run the real interpreter in your browser."
+    />
+    <meta property="og:url" content="https://adibfahimi.github.io/adib-lang/" />
+    <meta
+      property="og:image"
+      content="https://raw.githubusercontent.com/adibfahimi/adib-lang/main/assets/playground.png"
+    />
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="https://github.com/adibfahimi/adib-lang">
+        <span class="brand-mark">{&nbsp;}</span>
+        <span>adib lang</span>
+      </a>
+
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="https://github.com/adibfahimi/adib-lang#language-tour">Language</a>
+        <a href="https://github.com/adibfahimi/adib-lang/blob/main/docs/DESIGN.md">Design</a>
+        <a
+          class="nav-github"
+          href="https://github.com/adibfahimi/adib-lang"
+          rel="noreferrer"
+        >
+          GitHub
+          <span aria-hidden="true">↗</span>
+        </a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">
+          <span class="pulse-dot" aria-hidden="true"></span>
+          WebAssembly · runs entirely in your browser
+        </p>
+        <h1>
+          A tiny language.<br />
+          <span>Written from scratch in Rust.</span>
+        </h1>
+        <p class="hero-copy">
+          Adib Lang is a JavaScript-flavored interpreter with variables,
+          closures, recursion, arrays, and a hand-written lexer and parser.
+          Edit the program, press Run, and watch the real Rust interpreter
+          execute it.
+        </p>
+      </section>
+
+      <section class="playground" aria-label="Adib Lang playground">
+        <div class="panel editor-panel">
+          <div class="panel-bar">
+            <div class="file-label">
+              <span class="file-dot" aria-hidden="true"></span>
+              main.adib
+            </div>
+
+            <label class="example-picker">
+              <span class="sr-only">Load an example</span>
+              <select id="examples" aria-label="Load an example">
+                <option value="">Examples</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="editor-wrap">
+            <textarea id="editor" spellcheck="false" aria-label="Adib Lang source code">// Adib Lang — edit anything and press Run.
+function greet(name) {
+  return "hello, " + name
+}
+
+function fibonacci(n) {
+  var a = 0
+  var b = 1
+  for (var i = 0; i &lt; n; i++) {
+    const next = a + b
+    a = b
+    b = next
+  }
+  return a
+}
+
+const names = ["world", "GitHub", "recruiter"]
+for (var i = 0; i &lt; names.len; i++) {
+  print(greet(names[i]))
+}
+
+print("fib(10) =", fibonacci(10))</textarea>
+          </div>
+
+          <div class="panel-footer">
+            <div class="status" id="status" data-state="loading" role="status">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="status-text">Loading interpreter…</span>
+            </div>
+
+            <button class="run-button" id="run" type="button" disabled>
+              <span class="run-icon" aria-hidden="true">▶</span>
+              Run
+              <kbd>⌘↵</kbd>
+            </button>
+          </div>
+        </div>
+
+        <div class="panel output-panel">
+          <div class="panel-bar">
+            <div class="file-label">
+              <span class="output-icon" aria-hidden="true">›_</span>
+              Output
+            </div>
+            <button class="clear-button" id="clear" type="button">Clear</button>
+          </div>
+
+          <pre class="output" id="output" aria-live="polite"></pre>
+
+          <div class="panel-footer output-footer">
+            <span class="output-hint">stdout</span>
+            <span id="output-meta">waiting</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-grid" aria-label="Project highlights">
+        <article class="feature">
+          <span class="feature-number">01</span>
+          <h2>Hand-written pipeline</h2>
+          <p>
+            Lexer, recursive-descent parser, AST, and tree-walking interpreter —
+            no parser generators, no interpreter crates.
+          </p>
+        </article>
+
+        <article class="feature">
+          <span class="feature-number">02</span>
+          <h2>Real language semantics</h2>
+          <p>
+            Lexical scoping, first-class functions, closures, recursion,
+            short-circuit logic, and runtime errors with source positions.
+          </p>
+        </article>
+
+        <article class="feature">
+          <span class="feature-number">03</span>
+          <h2>One Rust core</h2>
+          <p>
+            The same interpreter powers the CLI and this page. The browser build
+            is compiled to WebAssembly with <code>wasm-bindgen</code>.
+          </p>
+        </article>
+
+        <article class="feature">
+          <span class="feature-number">04</span>
+          <h2>Tested in CI</h2>
+          <p>
+            Unit and end-to-end tests cover the lexer, parser, interpreter, and
+            every example program. Formatting and clippy are enforced.
+          </p>
+        </article>
+      </section>
+
+      <section class="cta">
+        <div>
+          <p class="eyebrow">Want the details?</p>
+          <h2>Read the interpreter, the grammar, and the design notes.</h2>
+        </div>
+        <a class="cta-link" href="https://github.com/adibfahimi/adib-lang">
+          View source on GitHub
+          <span aria-hidden="true">→</span>
+        </a>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>MIT © Adib Fahimi</span>
+      <span class="footer-separator" aria-hidden="true">·</span>
+      <a href="https://github.com/adibfahimi/adib-lang/blob/main/LICENSE">License</a>
+      <span class="footer-separator" aria-hidden="true">·</span>
+      <a href="https://github.com/adibfahimi/adib-lang/blob/main/examples/showcase.adib">
+        Full showcase
+      </a>
+      <span class="footer-spacer"></span>
+      <span>Built with Rust + WebAssembly</span>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
