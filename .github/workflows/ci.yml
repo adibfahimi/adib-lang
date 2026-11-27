@@ -42,3 +42,24 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+  playground:
+    name: Build WebAssembly playground
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Build playground
+        run: wasm-pack build --target web --out-dir web/pkg --release
