@@ -1,6 +1,6 @@
 [package]
 name = "adib-lang"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Adib Fahimi <adibfahi@gmail.com>"]
 description = "A small tree-walking interpreter for a JavaScript-flavored language"

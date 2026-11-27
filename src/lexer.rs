@@ -1,3 +1,4 @@
+use crate::error::{Diagnostic, Position};
 use phf::phf_map;
 use std::fs;
 
@@ -7,6 +8,8 @@ static KEYWORDS: phf::Map<&'static str, TokenKind> = phf_map! {
     "else" => TokenKind::Else,
     "return" => TokenKind::Return,
     "while" => TokenKind::While,
+    "break" => TokenKind::Break,
+    "continue" => TokenKind::Continue,
     "const" => TokenKind::Const,
     "var" => TokenKind::Var,
     "and" => TokenKind::And,
@@ -33,6 +36,8 @@ pub enum TokenKind {
     Else,
     Return,
     While,
+    Break,
+    Continue,
     And,
     Or,
     Function,
@@ -63,12 +68,77 @@ pub enum TokenKind {
     Not,
     Plus,
     Minus,
+    PlusPlus,
+    MinusMinus,
+    PlusAssign,
+    MinusAssign,
+    MulAssign,
+    DivAssign,
+    ModAssign,
 
     Assign,
     SemiColon,
     Comma,
     Dot,
     Eof,
+}
+
+impl TokenKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            TokenKind::Identifier => "an identifier",
+            TokenKind::Number => "a number",
+            TokenKind::String => "a string",
+            TokenKind::Const => "`const`",
+            TokenKind::Var => "`var`",
+            TokenKind::For => "`for`",
+            TokenKind::If => "`if`",
+            TokenKind::Else => "`else`",
+            TokenKind::Return => "`return`",
+            TokenKind::While => "`while`",
+            TokenKind::Break => "`break`",
+            TokenKind::Continue => "`continue`",
+            TokenKind::And => "`and`",
+            TokenKind::Or => "`or`",
+            TokenKind::Function => "`function`",
+            TokenKind::As => "`as`",
+            TokenKind::Match => "`match`",
+            TokenKind::In => "`in`",
+            TokenKind::True => "`true`",
+            TokenKind::False => "`false`",
+            TokenKind::Null => "`null`",
+            TokenKind::LParen => "`(`",
+            TokenKind::RParen => "`)`",
+            TokenKind::LBrace => "`{`",
+            TokenKind::RBrace => "`}`",
+            TokenKind::LBracket => "`[`",
+            TokenKind::RBracket => "`]`",
+            TokenKind::Mul => "`*`",
+            TokenKind::Div => "`/`",
+            TokenKind::Mod => "`%`",
+            TokenKind::Eq => "`==`",
+            TokenKind::NotEq => "`!=`",
+            TokenKind::Lt => "`<`",
+            TokenKind::LtEq => "`<=`",
+            TokenKind::Gt => "`>`",
+            TokenKind::GtEq => "`>=`",
+            TokenKind::Not => "`!`",
+            TokenKind::Plus => "`+`",
+            TokenKind::Minus => "`-`",
+            TokenKind::PlusPlus => "`++`",
+            TokenKind::MinusMinus => "`--`",
+            TokenKind::PlusAssign => "`+=`",
+            TokenKind::MinusAssign => "`-=`",
+            TokenKind::MulAssign => "`*=`",
+            TokenKind::DivAssign => "`/=`",
+            TokenKind::ModAssign => "`%=`",
+            TokenKind::Assign => "`=`",
+            TokenKind::SemiColon => "`;`",
+            TokenKind::Comma => "`,`",
+            TokenKind::Dot => "`.`",
+            TokenKind::Eof => "end of file",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,9 +157,10 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(file_path: &str) -> Result<Self, String> {
-        let source = fs::read_to_string(file_path)
-            .map_err(|err| format!("could not read `{}`: {}", file_path, err))?;
+    pub fn new(file_path: &str) -> Result<Self, Diagnostic> {
+        let source = fs::read_to_string(file_path).map_err(|error| {
+            Diagnostic::new(format!("could not read `{}`: {}", file_path, error))
+        })?;
         Ok(Self::from_source(&source))
     }
 
@@ -102,7 +173,7 @@ impl Lexer {
         }
     }
 
-    pub fn next_token(&mut self) -> Result<Token, String> {
+    pub fn next_token(&mut self) -> Result<Token, Diagnostic> {
         self.skip_whitespace_and_comments()?;
 
         let line = self.line;
@@ -127,11 +198,61 @@ impl Lexer {
             ',' => self.single(TokenKind::Comma),
             '.' => self.single(TokenKind::Dot),
             ';' => self.single(TokenKind::SemiColon),
-            '+' => self.single(TokenKind::Plus),
-            '-' => self.single(TokenKind::Minus),
-            '*' => self.single(TokenKind::Mul),
-            '/' => self.single(TokenKind::Div),
-            '%' => self.single(TokenKind::Mod),
+            '+' => {
+                self.advance();
+                match self.peek() {
+                    Some('+') => {
+                        self.advance();
+                        TokenKind::PlusPlus
+                    }
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::PlusAssign
+                    }
+                    _ => TokenKind::Plus,
+                }
+            }
+            '-' => {
+                self.advance();
+                match self.peek() {
+                    Some('-') => {
+                        self.advance();
+                        TokenKind::MinusMinus
+                    }
+                    Some('=') => {
+                        self.advance();
+                        TokenKind::MinusAssign
+                    }
+                    _ => TokenKind::Minus,
+                }
+            }
+            '*' => {
+                self.advance();
+                if self.peek() == Some('=') {
+                    self.advance();
+                    TokenKind::MulAssign
+                } else {
+                    TokenKind::Mul
+                }
+            }
+            '/' => {
+                self.advance();
+                if self.peek() == Some('=') {
+                    self.advance();
+                    TokenKind::DivAssign
+                } else {
+                    TokenKind::Div
+                }
+            }
+            '%' => {
+                self.advance();
+                if self.peek() == Some('=') {
+                    self.advance();
+                    TokenKind::ModAssign
+                } else {
+                    TokenKind::Mod
+                }
+            }
             '=' => {
                 self.advance();
                 if self.peek() == Some('=') {
@@ -207,11 +328,11 @@ impl Lexer {
         kind
     }
 
-    fn error(&self, message: impl Into<String>) -> String {
-        format!("{}:{} | {}", self.line, self.column, message.into())
+    fn error(&self, message: impl Into<String>) -> Diagnostic {
+        Diagnostic::at(message, Position::new(self.line, self.column))
     }
 
-    fn skip_whitespace_and_comments(&mut self) -> Result<(), String> {
+    fn skip_whitespace_and_comments(&mut self) -> Result<(), Diagnostic> {
         loop {
             match self.peek() {
                 Some(c) if c.is_whitespace() => self.advance(),
@@ -226,6 +347,7 @@ impl Lexer {
                     }
                 }
                 Some('/') if self.peek_next() == Some('*') => {
+                    let position = Position::new(self.line, self.column);
                     self.advance();
                     self.advance();
                     let mut closed = false;
@@ -239,7 +361,7 @@ impl Lexer {
                         self.advance();
                     }
                     if !closed {
-                        return Err(self.error("unterminated block comment"));
+                        return Err(Diagnostic::at("unterminated block comment", position));
                     }
                 }
                 _ => break,
@@ -248,7 +370,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn tokenize_string(&mut self) -> Result<Token, String> {
+    fn tokenize_string(&mut self) -> Result<Token, Diagnostic> {
         let line = self.line;
         let column = self.column;
         let quote = self.peek().unwrap();
@@ -269,7 +391,10 @@ impl Lexer {
             if c == '\\' {
                 self.advance();
                 let Some(escaped) = self.peek() else {
-                    return Err(self.error("unterminated string"));
+                    return Err(Diagnostic::at(
+                        "unterminated string",
+                        Position::new(line, column),
+                    ));
                 };
                 match escaped {
                     'n' => value.push('\n'),
@@ -291,10 +416,13 @@ impl Lexer {
             self.advance();
         }
 
-        Err(self.error("unterminated string"))
+        Err(Diagnostic::at(
+            "unterminated string",
+            Position::new(line, column),
+        ))
     }
 
-    fn tokenize_number(&mut self) -> Result<Token, String> {
+    fn tokenize_number(&mut self) -> Result<Token, Diagnostic> {
         let line = self.line;
         let column = self.column;
         let mut value = String::new();
@@ -329,7 +457,7 @@ impl Lexer {
         })
     }
 
-    fn tokenize_identifier_or_keyword(&mut self) -> Result<Token, String> {
+    fn tokenize_identifier_or_keyword(&mut self) -> Result<Token, Diagnostic> {
         let line = self.line;
         let column = self.column;
         let mut value = String::new();
@@ -414,13 +542,43 @@ mod tests {
         assert!(lexer
             .next_token()
             .unwrap_err()
+            .to_string()
             .contains("unterminated string"));
 
         let mut lexer = Lexer::from_source("/* oops");
         assert!(lexer
             .next_token()
             .unwrap_err()
+            .to_string()
             .contains("unterminated block comment"));
+    }
+
+    #[test]
+    fn lexes_modern_operators() {
+        let kinds: Vec<TokenKind> = tokens("x += 1 y -= 2 z *= 3 w /= 4 v %= 5 i++ j--")
+            .into_iter()
+            .map(|token| token.kind)
+            .collect();
+
+        assert!(kinds.contains(&TokenKind::PlusAssign));
+        assert!(kinds.contains(&TokenKind::MinusAssign));
+        assert!(kinds.contains(&TokenKind::MulAssign));
+        assert!(kinds.contains(&TokenKind::DivAssign));
+        assert!(kinds.contains(&TokenKind::ModAssign));
+        assert!(kinds.contains(&TokenKind::PlusPlus));
+        assert!(kinds.contains(&TokenKind::MinusMinus));
+    }
+
+    #[test]
+    fn lexes_break_and_continue_keywords() {
+        let kinds: Vec<TokenKind> = tokens("break continue")
+            .into_iter()
+            .map(|token| token.kind)
+            .collect();
+        assert_eq!(
+            kinds,
+            vec![TokenKind::Break, TokenKind::Continue, TokenKind::Eof]
+        );
     }
 
     #[test]

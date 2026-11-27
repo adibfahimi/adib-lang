@@ -1,3 +1,4 @@
+pub mod error;
 pub mod interpreter;
 pub mod lexer;
 pub mod parser;
@@ -15,11 +16,13 @@ use parser::Parser;
 /// ```
 pub fn run_source(source: &str) -> Result<String, String> {
     let mut lexer = Lexer::from_source(source);
-    let mut parser = Parser::new(&mut lexer)?;
-    let program = parser.parse()?;
+    let mut parser = Parser::new(&mut lexer).map_err(|error| error.render(source))?;
+    let program = parser.parse().map_err(|error| error.render(source))?;
 
     let mut interpreter = Interpreter::new();
-    interpreter.eval(&program)?;
+    interpreter
+        .eval(&program)
+        .map_err(|error| error.render(source))?;
     Ok(interpreter.take_output())
 }
 

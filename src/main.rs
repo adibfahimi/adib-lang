@@ -44,7 +44,7 @@ fn main() {
     let mut parser = match Parser::new(&mut lexer) {
         Ok(parser) => parser,
         Err(error) => {
-            eprintln!("{}: {}", file_name, error);
+            eprintln!("{}\n{}", file_name, error.render(&source));
             process::exit(1);
         }
     };
@@ -52,7 +52,7 @@ fn main() {
     let program = match parser.parse() {
         Ok(program) => program,
         Err(error) => {
-            eprintln!("{}: {}", file_name, error);
+            eprintln!("{}\n{}", file_name, error.render(&source));
             process::exit(1);
         }
     };
@@ -62,7 +62,7 @@ fn main() {
     print!("{}", interpreter.take_output());
 
     if let Err(error) = result {
-        eprintln!("{}: {}", file_name, error);
+        eprintln!("{}\n{}", file_name, error.render(&source));
         process::exit(1);
     }
 }
