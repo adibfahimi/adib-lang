@@ -1,0 +1,328 @@
+// ============================================================
+// Adib Lang showcase
+//
+// A deliberately large program that exercises the whole language:
+// recursion, closures, arrays, nested arrays, strings, loops,
+// sorting, searching, mathematics, and runtime error-free code.
+// ============================================================
+
+// ---------- Number theory ----------
+
+function gcd(a, b) {
+  if (b == 0) {
+    return a
+  }
+  return gcd(b, a % b)
+}
+
+function lcm(a, b) {
+  return a / gcd(a, b) * b
+}
+
+function is_prime(n) {
+  if (n < 2) {
+    return false
+  }
+  for (var divisor = 2; divisor * divisor <= n; divisor++) {
+    if (n % divisor == 0) {
+      return false
+    }
+  }
+  return true
+}
+
+function primes_up_to(limit) {
+  var primes = []
+  for (var candidate = 2; candidate <= limit; candidate++) {
+    if (is_prime(candidate)) {
+      primes = primes + [candidate]
+    }
+  }
+  return primes
+}
+
+function factorial(n) {
+  if (n <= 1) {
+    return 1
+  }
+  return n * factorial(n - 1)
+}
+
+function fibonacci(n) {
+  var previous = 0
+  var current = 1
+  for (var i = 0; i < n; i++) {
+    const next = previous + current
+    previous = current
+    current = next
+  }
+  return previous
+}
+
+function floor_divide(a, b) {
+  var quotient = 0
+  while (a >= b) {
+    a = a - b
+    quotient = quotient + 1
+  }
+  return quotient
+}
+
+function collatz(start) {
+  var sequence = [start]
+  var value = start
+  while (value != 1) {
+    if (value % 2 == 0) {
+      value = value / 2
+    } else {
+      value = value * 3 + 1
+    }
+    sequence = sequence + [value]
+  }
+  return sequence
+}
+
+// ---------- Array utilities ----------
+
+function sum(values) {
+  var total = 0
+  for (var i = 0; i < values.len; i++) {
+    total = total + values[i]
+  }
+  return total
+}
+
+function minimum(values) {
+  var result = values[0]
+  for (var i = 1; i < values.len; i++) {
+    if (values[i] < result) {
+      result = values[i]
+    }
+  }
+  return result
+}
+
+function maximum(values) {
+  var result = values[0]
+  for (var i = 1; i < values.len; i++) {
+    if (values[i] > result) {
+      result = values[i]
+    }
+  }
+  return result
+}
+
+function mean(values) {
+  return sum(values) / values.len
+}
+
+function swap(values, left, right) {
+  var result = []
+  for (var i = 0; i < values.len; i++) {
+    if (i == left) {
+      result = result + [values[right]]
+    } else if (i == right) {
+      result = result + [values[left]]
+    } else {
+      result = result + [values[i]]
+    }
+  }
+  return result
+}
+
+function bubble_sort(values) {
+  var sorted = values
+  for (var pass = 0; pass < sorted.len - 1; pass++) {
+    for (var i = 0; i < sorted.len - 1 - pass; i++) {
+      if (sorted[i] > sorted[i + 1]) {
+        sorted = swap(sorted, i, i + 1)
+      }
+    }
+  }
+  return sorted
+}
+
+function binary_search(values, target) {
+  var low = 0
+  var high = values.len - 1
+
+  while (low <= high) {
+    const middle = low + floor_divide(high - low, 2)
+    if (values[middle] == target) {
+      return middle
+    }
+    if (values[middle] < target) {
+      low = middle + 1
+    } else {
+      high = middle - 1
+    }
+  }
+
+  return -1
+}
+
+// ---------- Nested arrays ----------
+
+function matrix_multiply(left, right) {
+  const rows = left.len
+  const columns = right[0].len
+  const inner = right.len
+  var product = []
+
+  for (var row = 0; row < rows; row++) {
+    var result_row = []
+    for (var column = 0; column < columns; column++) {
+      var cell = 0
+      for (var k = 0; k < inner; k++) {
+        cell = cell + left[row][k] * right[k][column]
+      }
+      result_row = result_row + [cell]
+    }
+    product = product + [result_row]
+  }
+
+  return product
+}
+
+function pascal_triangle(rows) {
+  var triangle = []
+
+  for (var row = 0; row < rows; row++) {
+    var values = []
+    for (var column = 0; column <= row; column++) {
+      if (column == 0 or column == row) {
+        values = values + [1]
+      } else {
+        values = values + [triangle[row - 1][column - 1] + triangle[row - 1][column]]
+      }
+    }
+    triangle = triangle + [values]
+  }
+
+  return triangle
+}
+
+// ---------- Strings ----------
+
+function reverse(text) {
+  var result = ""
+  for (var i = text.len - 1; i >= 0; i--) {
+    result = result + text[i]
+  }
+  return result
+}
+
+function is_palindrome(text) {
+  return text == reverse(text)
+}
+
+function is_vowel(character) {
+  return character == "a"
+    or character == "e"
+    or character == "i"
+    or character == "o"
+    or character == "u"
+}
+
+function count_vowels(text) {
+  var count = 0
+  for (var i = 0; i < text.len; i++) {
+    if (is_vowel(text[i])) {
+      count = count + 1
+    }
+  }
+  return count
+}
+
+// ---------- Closures ----------
+
+function make_accumulator(start) {
+  var total = start
+
+  function add(amount) {
+    total = total + amount
+    return total
+  }
+
+  return add
+}
+
+// ---------- Inventory report ----------
+
+function inventory_value(prices, quantities) {
+  var total = 0
+  for (var i = 0; i < prices.len; i++) {
+    total = total + prices[i] * quantities[i]
+  }
+  return total
+}
+
+// ============================================================
+// Run the showcase
+// ============================================================
+
+print("=== Adib Lang showcase ===")
+
+print("")
+print("-- Number theory --")
+print("gcd(48, 18) =", gcd(48, 18))
+print("lcm(6, 8) =", lcm(6, 8))
+print("factorial(7) =", factorial(7))
+print("fibonacci(12) =", fibonacci(12))
+print("primes up to 30 =", primes_up_to(30))
+print("collatz(6) =", collatz(6))
+
+print("")
+print("-- Sorting and searching --")
+const unsorted = [42, 7, 19, 3, 88, 21, 3, 56]
+const sorted = bubble_sort(unsorted)
+print("unsorted =", unsorted)
+print("sorted =", sorted)
+print("binary_search(21) =", binary_search(sorted, 21))
+print("binary_search(100) =", binary_search(sorted, 100))
+
+print("")
+print("-- Statistics --")
+print("sum =", sum(sorted))
+print("minimum =", minimum(sorted))
+print("maximum =", maximum(sorted))
+print("mean =", mean(sorted))
+
+print("")
+print("-- Nested arrays --")
+const matrix_a = [[1, 2], [3, 4]]
+const matrix_b = [[5, 6], [7, 8]]
+print("A =", matrix_a)
+print("B =", matrix_b)
+print("A * B =", matrix_multiply(matrix_a, matrix_b))
+print("pascal(5) =", pascal_triangle(5))
+
+print("")
+print("-- Strings --")
+const word = "programming language"
+print("word =", word)
+print("length =", word.len)
+print("reversed =", reverse(word))
+print("is_palindrome(racecar) =", is_palindrome("racecar"))
+print("is_palindrome(adib) =", is_palindrome("adib"))
+print("vowels =", count_vowels(word))
+
+print("")
+print("-- Closures --")
+const accumulator = make_accumulator(10)
+print("accumulator(5) =", accumulator(5))
+print("accumulator(10) =", accumulator(10))
+print("accumulator(-3) =", accumulator(-3))
+
+print("")
+print("-- Inventory --")
+const item_names = ["notebook", "pen", "backpack"]
+const item_prices = [12.5, 3.25, 48]
+const item_quantities = [3, 10, 1]
+for (var i = 0; i < item_names.len; i++) {
+  print(item_names[i], "x", item_quantities[i], "=", item_prices[i] * item_quantities[i])
+}
+print("total inventory value =", inventory_value(item_prices, item_quantities))
+
+print("")
+print("=== showcase complete ===")

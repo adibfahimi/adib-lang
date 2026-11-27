@@ -1,0 +1,16 @@
+// A closure keeps its captured variable alive between calls.
+function makeCounter() {
+  var count = 0
+
+  function increment() {
+    count = count + 1
+    return count
+  }
+
+  return increment
+}
+
+const counter = makeCounter()
+print(counter())
+print(counter())
+print(counter())
